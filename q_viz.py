@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # 讀取 CSV 檔案，指定列索引
-file_path = 'dgvins_vio.csv'
+file_path = 'csv/dgvins_vio.csv'
 data = pd.read_csv(file_path, header=None, index_col=False, names=['timestamp', 'pos_x', 'pos_y', 'pos_z', 'q_w', 'q_x', 'q_y', 'q_z'])
 print(data)
 
@@ -55,7 +55,7 @@ ax.set_zlabel('Z')
 ax.legend()
 
 ##next
-file_path = 'data_org.csv'
+file_path = 'csv/data.csv'
 data = pd.read_csv(file_path, header=None, index_col=False, names=['timestamp', 'pos_x', 'pos_y', 'pos_z', 'q_w', 'q_x', 'q_y', 'q_z'])
 print(data)
 

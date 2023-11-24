@@ -6,10 +6,10 @@ from scipy.spatial.transform import Rotation as R
 from mpl_toolkits.mplot3d import axes3d
 
 # 讀取A資料
-A_data = pd.read_csv('dgvins_vio.csv', header=None, names=['timestamp', 'col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7', 'col8', 'col9', 'col10'])
+A_data = pd.read_csv('csv/dgvins_vio.csv', header=None, names=['timestamp', 'col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7', 'col8', 'col9', 'col10'])
 
 # 讀取B資料，並加上虛構的時間標記
-B_data = pd.read_csv('data_aligned.csv', header=None, names=['aligned_timestamp', 'col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7'])
+B_data = pd.read_csv('csv/data.csv', header=None, names=['aligned_timestamp', 'col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7'])
 B_data_origin = B_data.copy()
 
 # 將 x, y, z 座標進行逆時針旋轉 90 度
@@ -85,6 +85,6 @@ for angle in range(0, 360*4 + 1):
     #plt.title('Elevation: %d°, Azimuth: %d°, Roll: %d°' % (elev, azim, roll))
 
     plt.draw()
-    plt.pause(.0005)
+    plt.pause(.001)
 
 plt.close()
