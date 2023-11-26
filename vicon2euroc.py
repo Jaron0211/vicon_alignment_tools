@@ -9,8 +9,8 @@ This file cropping the vio_path and vicon_gt file into same size, and labeling t
 ####---------parameters----------####
 
 # file name
-vio_file = 'dgvins_vio.csv'
-gt_file  = 'd455_vicon_dynamic_gt.csv'
+vio_file = './csv/dgvins_vio.csv'
+gt_file  = './csv/data.csv'
 
 # adjustment
 x_scale = 10

@@ -5,7 +5,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.colors import Normalize
 
 # 讀取 CSV 檔案，指定列索引
-file_path = 'csv/dgvins_vio.csv'
+file_path = 'timed_dgvins_vio.csv'
 data = pd.read_csv(file_path, header=None, index_col=False, names=['timestamp', 'pos_x', 'pos_y', 'pos_z', 'q_w', 'q_x', 'q_y', 'q_z'])
 
 # 取得資料
@@ -60,7 +60,7 @@ ax.set_zlabel('Z')
 ax.legend()
 
 ##next
-file_path = 'csv/data.csv'
+file_path = 'timed_gt.csv'
 data = pd.read_csv(file_path, header=None, index_col=False, names=['timestamp', 'pos_x', 'pos_y', 'pos_z', 'q_w', 'q_x', 'q_y', 'q_z'])
 
 # 取得資料
