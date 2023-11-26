@@ -13,11 +13,6 @@ This file cropping the vio_path and vicon_gt file into same size, and labeling t
 vio_file = './csv/dgvins_vio.csv'
 gt_file  = './csv/data.csv'
 
-# adjustment
-x_scale = 10
-y_scale = 1000
-offset = 0
-
 #variable
 best_offset = 0
 best_error_sum = 9999999
@@ -36,93 +31,15 @@ from PyQt5 import QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 import sys
+import os
 
-from main_ui import Ui_MainWindow
+from main_ui import Ui_VIO_alignment_Tool
 
 from scipy.spatial.transform import Rotation as R
 from mpl_toolkits.mplot3d import axes3d
 
 ####--------------UI-----------------####
 from PyQt5 import QtCore, QtGui, QtWidgets
-
-class Ui_MainWindow(object):
-    def setupUi(self, MainWindow):
-        MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(545, 481)
-        MainWindow.setMinimumSize(QtCore.QSize(545, 481))
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setObjectName("centralwidget")
-        self.gridLayout_2 = QtWidgets.QGridLayout(self.centralwidget)
-        self.gridLayout_2.setObjectName("gridLayout_2")
-        self.gridLayout = QtWidgets.QGridLayout()
-        self.gridLayout.setSizeConstraint(QtWidgets.QLayout.SetMaximumSize)
-        self.gridLayout.setObjectName("gridLayout")
-        self.label_2 = QtWidgets.QLabel(self.centralwidget)
-        self.label_2.setObjectName("label_2")
-        self.gridLayout.addWidget(self.label_2, 0, 2, 1, 1)
-        self.xscale_spinBox = QtWidgets.QSpinBox(self.centralwidget)
-        self.xscale_spinBox.setMinimum(1)
-        self.xscale_spinBox.setMaximum(10000)
-        self.xscale_spinBox.setObjectName("xscale_spinBox")
-        self.gridLayout.addWidget(self.xscale_spinBox, 3, 2, 1, 1)
-        self.label_4 = QtWidgets.QLabel(self.centralwidget)
-        self.label_4.setObjectName("label_4")
-        self.gridLayout.addWidget(self.label_4, 6, 2, 1, 1)
-        self.offset_spinBox = QtWidgets.QSpinBox(self.centralwidget)
-        self.offset_spinBox.setMinimum(1)
-        self.offset_spinBox.setMaximum(10000)
-        self.offset_spinBox.setObjectName("offset_spinBox")
-        self.gridLayout.addWidget(self.offset_spinBox, 5, 2, 1, 1)
-        self.label_3 = QtWidgets.QLabel(self.centralwidget)
-        self.label_3.setObjectName("label_3")
-        self.gridLayout.addWidget(self.label_3, 4, 2, 1, 1)
-        self.label = QtWidgets.QLabel(self.centralwidget)
-        self.label.setObjectName("label")
-        self.gridLayout.addWidget(self.label, 2, 2, 1, 1)
-        self.yscale_spinBox = QtWidgets.QSpinBox(self.centralwidget)
-        self.yscale_spinBox.setMinimum(1)
-        self.yscale_spinBox.setMaximum(10000)
-        self.yscale_spinBox.setObjectName("yscale_spinBox")
-        self.gridLayout.addWidget(self.yscale_spinBox, 1, 2, 1, 1)
-        self.range_spinBox = QtWidgets.QSpinBox(self.centralwidget)
-        self.range_spinBox.setMinimum(100)
-        self.range_spinBox.setMaximum(10000)
-        self.range_spinBox.setObjectName("range_spinBox")
-        self.gridLayout.addWidget(self.range_spinBox, 7, 2, 1, 1)
-        self.save_button = QtWidgets.QPushButton(self.centralwidget)
-        self.save_button.setText('Save result')
-        self.save_button.setObjectName("save_botton")
-        self.gridLayout.addWidget(self.save_button, 8, 2, 1, 1)
-        self.canvas = FigureCanvas(plt.Figure())
-        self.canvas.setMinimumSize(QtCore.QSize(400, 400))
-        self.canvas.setObjectName("canvas")
-        self.gridLayout.addWidget(self.canvas, 0, 0, 8, 2)
-        self.gridLayout_2.addLayout(self.gridLayout, 0, 0, 1, 1)
-        MainWindow.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 545, 22))
-        self.menubar.setObjectName("menubar")
-        MainWindow.setMenuBar(self.menubar)
-        self.statusbar = QtWidgets.QStatusBar(MainWindow)
-        self.statusbar.setObjectName("statusbar")
-        MainWindow.setStatusBar(self.statusbar)
-        self.toolBar = QtWidgets.QToolBar(MainWindow)
-        self.toolBar.setObjectName("toolBar")
-        MainWindow.addToolBar(QtCore.Qt.TopToolBarArea, self.toolBar)
-
-        self.retranslateUi(MainWindow)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
-
-    def retranslateUi(self, MainWindow):
-        _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
-        self.label_2.setText(_translate("MainWindow", "Y_scale"))
-        self.label_4.setText(_translate("MainWindow", "Show range"))
-        self.label_3.setText(_translate("MainWindow", "Offset"))
-        self.label.setText(_translate("MainWindow", "X scale"))
-        self.toolBar.setWindowTitle(_translate("MainWindow", "toolBar"))
-
-
 
 ####--------------UI-----------------####
 
@@ -132,31 +49,93 @@ gt_data  = pd.read_csv(gt_file , header=None, names=['timestamp', 'px', 'py', 'p
 # force finding, maybe change to the DTW method
 # https://tslearn.readthedocs.io/en/stable/user_guide/dtw.html
 
-class Main(QtWidgets.QMainWindow, Ui_MainWindow):
+class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
 
-        self.yscale_spinBox.valueChanged.connect(self.update_y_scale)
-        self.xscale_spinBox.valueChanged.connect(self.update_x_scale)
-        self.offset_spinBox.valueChanged.connect(self.update_offset)
-        self.range_spinBox.valueChanged.connect(self.update_range)
-        self.save_button.clicked.connect(self.save_alignment)
+        self.cwd = os.getcwd()
 
-        self.x_scale = x_scale
-        self.y_scale = y_scale
-        self.offset = offset
-        self.range = 50
+        self.GT_file.clicked.connect(self.open_gt_file)
+        self.VIO_file.clicked.connect(self.open_vio_file)
+
+        self.canvas = FigureCanvas(plt.Figure())
+        self.gridLayout.addWidget(self.canvas, 0, 0, 8, 2)
+
+        self.yscale_spinbox.valueChanged.connect(self.update_y_scale)
+        self.xscale_spinbox.valueChanged.connect(self.update_x_scale)
+
+        self.range_spinbox.valueChanged.connect(self.update_range)
+
+        self.vio_shifter.valueChanged.connect(self.update_VIO_shift)
+        self.gt_shifter.valueChanged.connect(self.update_GT_shift)
+
+        self.nav_offset_spinbox.valueChanged.connect(self.update_VIO_shift)
+        self.offset_spinbox.valueChanged.connect(self.update_GT_shift)
+
+        self.save_result.clicked.connect(self.save_alignment)
+
+        self.vio_shifter.setMaximum(len(vio_data['timestamp']))
+        self.gt_shifter.setMaximum(len(gt_data['timestamp']))
+
+        self.nav_offset_spinbox.setMaximum(len(vio_data['timestamp']))
+        self.offset_spinbox.setMaximum(len(gt_data['timestamp']))
+
+        self.Start_from.valueChanged.connect(self.update_start_from)
+        self.End_to.valueChanged.connect(self.update_end_to)
+
+        self.gt_file = gt_file
+        self.vio_file = vio_file
+
+        self.gt_data = gt_data
+        self.vio_data = vio_data
+
+        self.x_scale = self.xscale_spinbox.value()
+        self.y_scale = self.yscale_spinbox.value()
+        self.offset = self.offset_spinbox.value()
+        self.range = self.range_spinbox.value()
+        self.VIO_shift = self.nav_offset_spinbox.value()
+        self.gt_shift = self.offset_spinbox.value()
 
         self.best_offset = 0
         self.best_error_sum = 9999999
 
         self.canvas.ax = self.canvas.figure.add_subplot(111)
 
+        self.start_from_index = 0
+        self.end_to_index = len(vio_data['timestamp'])
+
         self.plot_data()
         self.update_y_scale(1)
         self.update_x_scale(1)
+    
+    def open_gt_file(self):
+        self.gt_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
+                                    "Choose the GT path file",  
+                                    self.cwd, # 起始路径 
+                                    "All Files (*);;Text Files (*.txt)")   # 设置文件扩展名过滤,用双分号间隔
+
+        if self.gt_file == "":
+            return
         
+        global gt_data
+        self.gt_data = pd.read_csv(self.gt_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
+        self.plot_data()
+
+    def open_vio_file(self):
+        self.vio_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
+                                    "Choose the VIO path file",  
+                                    self.cwd, # 起始路径 
+                                    "All Files (*);;Text Files (*.txt)")   # 设置文件扩展名过滤,用双分号间隔
+
+        if self.vio_file == "":
+            return
+        
+        global vio_data
+        vio_data = pd.read_csv(self.vio_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
+        self.end_to_index = len(vio_data['timestamp'])
+        self.plot_data()
+
     def update_x_scale(self, value):
         self.x_scale = value  # Mapping slider value to a reasonable range
         self.plot_data()
@@ -172,21 +151,66 @@ class Main(QtWidgets.QMainWindow, Ui_MainWindow):
     def update_range(self, value):
         self.range = value
         self.plot_data()
+    
+    def update_VIO_shift(self, value):
+        self.VIO_shift = value
+
+        self.nav_offset_spinbox.setValue(value)
+        self.vio_shifter.setValue(value)
+        self.plot_data()
+
+    def update_GT_shift(self, value):
+        self.gt_shift = value
+
+        self.offset_spinbox.setValue(value)
+        self.gt_shifter.setValue(value)
+
+        self.Start_from.setMaximum(len(self.vio_data['timestamp']) + self.gt_shift)
+        self.start_from_index = self.Start_from.value() + self.gt_shift
+
+        self.End_to.setMaximum(len(self.vio_data['timestamp']) + self.gt_shift)
+        self.end_to_index = len(self.vio_data['timestamp']) + self.gt_shift - self.End_to.value()
+
+        self.plot_data()
+
+    def update_start_from(self, value):
+        self.Start_from.setMaximum(len(self.vio_data['timestamp'])+self.gt_shift)
+        
+        new_index = value
+
+        if new_index < self.end_to_index:
+            self.start_from_index = new_index
+
+        self.plot_data()
+
+    def update_end_to(self, value):
+        self.End_to.setMaximum(len(self.vio_data['timestamp']) + self.gt_shift)
+
+        new_index = len(self.vio_data['timestamp']) + self.gt_shift - value
+
+        if new_index > self.start_from_index:
+            self.end_to_index = new_index
+
+        self.plot_data()
 
     def plot_data(self):
-        vio_compare_array = vio_data['px'][0:self.range] * self.y_scale
+        vio_compare_array = self.vio_data['px'] * self.y_scale
 
-        gt_indexs = [i for i in range(self.offset, self.offset + int(self.x_scale * self.range), int(self.x_scale))]
-        gt_compare_array = gt_data['py'][gt_indexs]
+        gt_indexs = [i for i in range(0, len(gt_data['py']), int(self.x_scale))]
+        gt_compare_array = self.gt_data['py'][gt_indexs]
 
         self.canvas.ax.clear()
         self.canvas.ax.plot(range(0, len(gt_compare_array), 1), gt_compare_array)
-        self.canvas.ax.plot(range(0, len(vio_compare_array), 1), vio_compare_array)
+        self.canvas.ax.plot(range(self.gt_shift, len(vio_compare_array) + self.gt_shift, 1), vio_compare_array)
         
         self.canvas.ax.set_xlabel('Time')
         self.canvas.ax.set_ylabel('Position')
-        self.canvas.ax.legend(['VIO Path', 'Vicon GT'])
+        self.canvas.ax.legend([self.gt_file, self.vio_file])
         self.canvas.ax.set_title('VIO Path vs Vicon GT')
+
+        self.canvas.ax.set_xlim([self.VIO_shift,self.VIO_shift + self.range])
+        self.canvas.ax.axvline(x = self.start_from_index, color = 'r')
+        self.canvas.ax.axvline(x = self.end_to_index, color = 'b')
 
         self.canvas.draw()
 
