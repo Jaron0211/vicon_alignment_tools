@@ -235,8 +235,8 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         timing_array = [i for i in range(int(time_start), int(time_end) ,time_space)]
         gt_data_crop['timestamp'] = timing_array[:len(gt_data_crop['timestamp'])]
 
-        vio_data_crop.to_csv('timed_dgvins_vio.csv',index=False, header=None, float_format='%.9f')
-        gt_data_crop.to_csv('timed_gt.csv'         ,index=False, header=None, float_format='%.9f')
+        vio_data_crop.to_csv('timed_dgvins_vio_crop.csv',index=False, header=None, float_format='%.9f')
+        gt_data_crop.to_csv('timed_gt_crop.csv'         ,index=False, header=None, float_format='%.9f')
         print('ok')
         
 if __name__ == "__main__":
