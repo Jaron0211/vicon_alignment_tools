@@ -33,7 +33,9 @@ import matplotlib.style as mplstyle
 mplstyle.use(['fast'])
 mpl.rcParams['path.simplify'] = True
 mpl.rcParams['path.simplify_threshold'] = 1.0
-mpl.rcParams['agg.path.chunksize'] = 10000
+mpl.rcParams['agg.path.chunksize'] = 1
+
+from matplotlib.animation import FuncAnimation
 
 from PyQt5 import QtWidgets
 from PyQt5.QtGui import *
@@ -70,13 +72,14 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
 
         self.canvas = FigureCanvas(plt.Figure())
         self.canvas_3d = FigureCanvas(plt.Figure())
-        self.gridLayout.addWidget(self.canvas, 1, 0, 8, 2)
-        self.gridLayout.addWidget(self.canvas_3d, 0, 0, 1, 4)
+        self.gridLayout.addWidget(self.canvas, 5, 0, 8, 2)
+        self.gridLayout.addWidget(self.canvas_3d, 0, 0, 5, 3)
 
         self.yscale_spinbox.valueChanged.connect(self.update_y_scale)
         self.xscale_spinbox.valueChanged.connect(self.update_x_scale)
 
         self.range_spinbox.valueChanged.connect(self.update_range)
+        self.range_spinbox.setValue(1000)
 
         self.vio_shifter.valueChanged.connect(self.update_VIO_shift)
         self.gt_shifter.valueChanged.connect(self.update_GT_shift)
@@ -86,11 +89,11 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
 
         self.save_result.clicked.connect(self.save_alignment)
 
-        self.vio_shifter.setMaximum(len(vio_data['timestamp']))
-        self.gt_shifter.setMaximum(len(gt_data['timestamp']))
+        self.vio_shifter.setMaximum(10000)
+        self.gt_shifter.setMaximum(10000)
 
-        self.nav_offset_spinbox.setMaximum(len(vio_data['timestamp']))
-        self.offset_spinbox.setMaximum(len(gt_data['timestamp']))
+        self.nav_offset_spinbox.setMaximum(10000)
+        self.offset_spinbox.setMaximum(10000)
 
         self.Start_from.valueChanged.connect(self.update_start_from)
         self.End_to.valueChanged.connect(self.update_end_to)
@@ -100,31 +103,31 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
 
         self.gt_data = gt_data
         self.vio_data = vio_data
+        self.vio_rotated = self.vio_data.copy()
 
         self.x_scale = self.xscale_spinbox.value()
         self.y_scale = self.yscale_spinbox.value()
         self.offset = self.offset_spinbox.value()
         self.range = self.range_spinbox.value()
+        self.range_spinbox.setMaximum(100)
         self.VIO_shift = self.nav_offset_spinbox.value()
-        self.gt_shift = self.offset_spinbox.value()
+        self.gt_shift = self.cal_vio_inter_value(0)
 
         self.best_offset = 0
         self.best_error_sum = 9999999
 
-        self.canvas_3d.ax = self.canvas_3d.figure.add_subplot(111, projection='3d')
+        self.canvas_3d.ax = self.canvas_3d.figure.add_subplot(122, projection='3d')
+        self.canvas_3d.perspection = self.canvas_3d.figure.add_subplot(121)
         self.canvas.ax = self.canvas.figure.add_subplot(111)
 
         self.start_from_index = 0
-        self.end_to_index = len(vio_data['timestamp'])
+        self.end_to_index = 1.7*10**18
 
-        self.plot_data()
-        self.Td_plot_data()
         self.update_y_scale(1)
         self.update_x_scale(1)
 
-        self.R_thread = QThread()
-        self.R_thread.run = self.Td_rotation
-        self.R_thread.start()
+        self.ani_1 = FuncAnimation(self.canvas_3d.figure, self.Td_plot_data, frames=np.arange(0,360), repeat=1, interval=100, blit=True)  
+        self.ani_2 = FuncAnimation(self.canvas.figure, self.plot_data, frames=np.arange(0,1), repeat=1, interval=10, blit=True)  
     
     def open_gt_file(self):
         self.gt_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
@@ -137,8 +140,6 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         
         global gt_data
         self.gt_data = pd.read_csv(self.gt_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
-        self.plot_data()
-        self.Td_plot_data()
 
     def open_vio_file(self):
         self.vio_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
@@ -151,77 +152,73 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         
         global vio_data
         vio_data = pd.read_csv(self.vio_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
-        self.end_to_index = len(vio_data['timestamp'])
-        self.plot_data()
-        self.Td_plot_data()
+        self.end_to_index = len(self.vio_data['timestamp'])
 
     def update_x_scale(self, value):
         self.x_scale = value  # Mapping slider value to a reasonable range
-        self.plot_data()
 
     def update_y_scale(self, value):
         self.y_scale = value  # Mapping slider value to a reasonable range
-        self.plot_data()
     
     def update_offset(self, value):
         self.offset = value
-        self.plot_data()
 
     def update_range(self, value):
-        self.range = value
-        self.plot_data()
+        self.range = self.cal_vio_inter_value(value*100)-min(self.vio_data['timestamp'])
     
     def update_VIO_shift(self, value):
         self.VIO_shift = value
 
         self.nav_offset_spinbox.setValue(value)
         self.vio_shifter.setValue(value)
-        self.plot_data()
+
+    def cal_vio_inter_value(self, value):
+        return (value/10000 * (max(self.vio_data['timestamp']) - min(self.vio_data['timestamp'])) + min(self.vio_data['timestamp']))
 
     def update_GT_shift(self, value):
-        self.gt_shift = value
+
+        self.gt_shift = self.cal_vio_inter_value(value)
 
         self.offset_spinbox.setValue(value)
         self.gt_shifter.setValue(value)
 
-        self.Start_from.setMaximum(len(self.vio_data['timestamp']) + self.gt_shift)
-        self.start_from_index = self.Start_from.value() + self.gt_shift
-
-        self.End_to.setMaximum(len(self.vio_data['timestamp']) + self.gt_shift)
-        self.end_to_index = len(self.vio_data['timestamp']) + self.gt_shift - self.End_to.value()
-
-        self.plot_data()
+        self.start_from_index = self.cal_vio_inter_value(self.Start_from.value()) + self.gt_shift
+        self.end_to_index = max(self.vio_data['timestamp']) - self.cal_vio_inter_value(self.End_to.value())
 
     def update_start_from(self, value):
-        self.Start_from.setMaximum(len(self.vio_data['timestamp'])+self.gt_shift)
-        
-        new_index = value
+        self.Start_from.setMaximum(10000)
+        self.Start_from.setMinimum(0)
+
+        new_index = self.cal_vio_inter_value(value)
 
         if new_index < self.end_to_index:
             self.start_from_index = new_index
+        else:
+            self.start_from_index = self.end_to_index
 
-        self.plot_data()
 
     def update_end_to(self, value):
-        self.End_to.setMaximum(len(self.vio_data['timestamp']) + self.gt_shift)
+        self.End_to.setMaximum(10000)
+        self.End_to.setMinimum(0)
 
-        new_index = len(self.vio_data['timestamp']) + self.gt_shift - value
+        new_index = max(self.vio_data['timestamp']) + self.gt_shift - self.cal_vio_inter_value(value)
 
         if new_index > self.start_from_index:
             self.end_to_index = new_index
+        else:
+            self.end_to_index = self.start_from_index
 
-        self.plot_data()
+    # def plot_data(self, num):
+    #     ## 2D timimg
+    #     vio_compare_array = self.vio_rotated['px'] * self.y_scale
 
-    # def plot_data(self):
-    #     vio_compare_array = self.vio_data['px'] * self.y_scale
-
-    #     gt_indexs = [i for i in range(0, len(gt_data['py']), int(self.x_scale))]
-    #     gt_compare_array = self.gt_data['py'][gt_indexs]
+    #     gt_indexs = [i for i in range(0, len(gt_data['px']), int(self.x_scale))]
+    #     gt_compare_array = self.gt_data['px'][gt_indexs]
 
     #     self.canvas.ax.clear()
-    #     self.canvas.ax.plot(range(0, len(gt_compare_array), 1), gt_compare_array)
-    #     self.canvas.ax.plot(range(self.gt_shift, len(vio_compare_array) + self.gt_shift, 1), vio_compare_array)
-        
+    #     self.canvas.ax.scatter(range(0, len(gt_compare_array), 1), gt_compare_array, color='blue',marker='o',s=.1)
+    #     self.canvas.ax.scatter(range(self.gt_shift, len(vio_compare_array) + self.gt_shift, 1), vio_compare_array,color='red',marker='o',s=.1)
+
     #     self.canvas.ax.set_xlabel('Time')
     #     self.canvas.ax.set_ylabel('Position')
     #     self.canvas.ax.legend([self.gt_file, self.vio_file])
@@ -231,84 +228,110 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
     #     self.canvas.ax.axvline(x = self.start_from_index, color = 'r')
     #     self.canvas.ax.axvline(x = self.end_to_index, color = 'b')
 
-    #     self.canvas.draw()
+    #     return [self.canvas.ax]
 
-    def plot_data(self):
+    def plot_data(self, num):
         ## 2D timimg
-        vio_compare_array = self.vio_data['px'] * self.y_scale
 
-        gt_indexs = [i for i in range(0, len(gt_data['py']), int(self.x_scale))]
-        gt_compare_array = self.gt_data['py'][gt_indexs]
+        vio_compare_index = self.vio_rotated['timestamp']
+        vio_compare_array = self.vio_rotated['px'] * self.y_scale
+
+        gt_indexs = [ (self.vio_rotated['timestamp'][0] + (i)/self.x_scale*10**8 - self.VIO_shift*10**7) for i in range(0, len(gt_data['timestamp']), 1)]
+        gt_compare_array = self.gt_data['px']
 
         self.canvas.ax.clear()
-        self.canvas.ax.plot(range(0, len(gt_compare_array), 1), gt_compare_array)
-        self.canvas.ax.plot(range(self.gt_shift, len(vio_compare_array) + self.gt_shift, 1), vio_compare_array)
+        self.canvas.ax.scatter(gt_indexs, gt_compare_array, color='blue',marker='o',s=.1)
+        self.canvas.ax.scatter(vio_compare_index, vio_compare_array,color='red',marker='o',s=.1)
 
         self.canvas.ax.set_xlabel('Time')
         self.canvas.ax.set_ylabel('Position')
         self.canvas.ax.legend([self.gt_file, self.vio_file])
         self.canvas.ax.set_title('VIO Path vs Vicon GT')
 
-        self.canvas.ax.set_xlim([self.VIO_shift,self.VIO_shift + self.range])
+        self.canvas.ax.set_xlim([self.gt_shift, self.gt_shift+self.range])
         self.canvas.ax.axvline(x = self.start_from_index, color = 'r')
         self.canvas.ax.axvline(x = self.end_to_index, color = 'b')
 
-        self.canvas.draw()
+        return [self.canvas.ax]
     
-    def Td_plot_data(self):
+    def Td_plot_data(self, num):
+
         ## 3D R|T
         rotated_coordinates_xyz = np.column_stack((self.vio_data['px'], self.vio_data['py'], self.vio_data['pz']))
-        rotation_xyz = R.from_euler('Z', 0, degrees=True)
+        rotation_xyz = R.from_euler('ZYX', [self.yscale_spinbox_2.value(),self.yscale_spinbox_3.value(),self.yscale_spinbox_4.value()], degrees=True)
         rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
 
-        vio_rotated = self.vio_data.copy()
-        vio_rotated[['px','py','pz']] = rotated_coordinates_xyz
+        self.vio_rotated = self.vio_data.copy()
+        self.vio_rotated[['px','py','pz']] = rotated_coordinates_xyz
 
         self.canvas_3d.ax.clear()
-        self.canvas_3d.ax.scatter(self.gt_data['px'], self.gt_data['py'], self.gt_data['pz'], s=.5, label='Origin Data')
-        self.canvas_3d.ax.scatter(vio_rotated['px'], vio_rotated['py'], vio_rotated['pz'], s=.5, label='Rotated Data')
+        self.canvas_3d.ax.disable_mouse_rotation()
+        self.canvas_3d.ax.plot(self.gt_data['px'], self.gt_data['py'], self.gt_data['pz'], color = 'r', label='Origin Data')
+        self.canvas_3d.ax.scatter(self.vio_rotated['px'], self.vio_rotated['py'], self.vio_rotated['pz'], s=.5, label='Rotated Data')
 
         self.canvas_3d.ax.set_xlabel('X(m)')
         self.canvas_3d.ax.set_ylabel('Y(m)')
+        self.canvas_3d.ax.set_zlabel('Z(m)')
         self.canvas_3d.ax.legend([self.gt_file, self.vio_file])
         self.canvas_3d.ax.set_title('VIO Path vs Vicon GT')
 
-        self.canvas_3d.draw()
+        self.canvas_3d.perspection.clear()
+        self.canvas_3d.perspection.plot(self.gt_data['px'], self.gt_data['py'])
+        self.canvas_3d.perspection.plot(self.vio_rotated['px'], self.vio_rotated['py'])
+
+        angle = num
+        # Normalize the angle to the range [-180, 180] for display
+        angle_norm = (angle + 180) % 360 - 180
+
+        # Cycle through a full rotation of elevation, then azimuth, roll, and all
+        # elev = azim = roll = 0
+        azim = 0
+        if angle <= 360:
+            azim = angle
+        #     elev = angle_norm
+        # elif angle <= 360*2:
+        #     azim = angle_norm
+        # elif angle <= 360*3:
+        #     roll = angle_norm
+        else:
+            azim = angle_norm
+
+        self.canvas_3d.ax.view_init(30, azim)
+
+        return [self.canvas_3d.ax, self.canvas_3d.perspection]
 
     def Td_rotation(self):
         
-        while 1:
-            for angle in range(0, 360*4 + 1):
-            # Normalize the angle to the range [-180, 180] for display
-                angle_norm = (angle + 180) % 360 - 180
 
-                # Cycle through a full rotation of elevation, then azimuth, roll, and all
-                # elev = azim = roll = 0
-                azim = 0
-                if angle <= 360:
-                    azim = angle
-                #     elev = angle_norm
-                # elif angle <= 360*2:
-                #     azim = angle_norm
-                # elif angle <= 360*3:
-                #     roll = angle_norm
-                else:
-                    azim = angle_norm
+        angle = 0
+        # Normalize the angle to the range [-180, 180] for display
+        angle_norm = (angle + 180) % 360 - 180
 
-                # Update the axis view and title
-                #print(elev, azim, roll)
-                
-                self.canvas_3d.ax.view_init(30, azim)
-                #plt.title('Elevation: %d°, Azimuth: %d°, Roll: %d°' % (elev, azim, roll))
+        # Cycle through a full rotation of elevation, then azimuth, roll, and all
+        # elev = azim = roll = 0
+        azim = 0
+        if angle <= 360:
+            azim = angle
+        #     elev = angle_norm
+        # elif angle <= 360*2:
+        #     azim = angle_norm
+        # elif angle <= 360*3:
+        #     roll = angle_norm
+        else:
+            azim = angle_norm
 
-                self.canvas_3d.draw()
-                time.sleep(0.01)
-                #self.canvas_3d.pause(.001)
+        # Update the axis view and title
+        #print(elev, azim, roll)
+        
+        self.canvas_3d.ax.view_init(90, azim)
+
+        return self.canvas_3d.ax
+
 
     def save_alignment(self):
 
         gt_start = self.offset
-        vio_end = int((len(gt_data['py'])-gt_start)/self.x_scale)
+        vio_end = int((len(gt_data['px'])-gt_start)/self.x_scale)
 
         vio_data_crop = vio_data[:vio_end]
         gt_data_crop  = gt_data[gt_start:]
