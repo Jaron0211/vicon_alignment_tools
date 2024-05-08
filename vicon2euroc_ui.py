@@ -54,8 +54,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 ####--------------UI-----------------####
 
-vio_data = pd.read_csv(vio_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
-gt_data  = pd.read_csv(gt_file , header=None, names=['timestamp', 'px', 'py', 'pz', 'qx', 'qy', 'qz', 'qw'])
+# vio_data = pd.read_csv(vio_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
+# gt_data  = pd.read_csv(gt_file , header=None, names=['timestamp', 'px', 'py', 'pz', 'qx', 'qy', 'qz', 'qw'])
 
 # force finding, maybe change to the DTW method
 # https://tslearn.readthedocs.io/en/stable/user_guide/dtw.html
@@ -66,6 +66,18 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.setupUi(self)
 
         self.cwd = os.getcwd()
+
+        self.gt_file = ''
+        self.vio_file = ''
+
+        self.gt_data = pd.DataFrame([[0,0,0,0,0,0,0,0]],columns=['timestamp', 'px', 'py', 'pz', 'qx', 'qy', 'qz', 'qw'])
+        self.vio_data = pd.DataFrame([[0,0,0,0,0,0,0,0,0,0,0]],columns=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
+        self.vio_rotated = self.vio_data.copy()
+
+        self.vio_presave = self.vio_data.copy()
+        self.gt_presave = self.gt_data.copy()
+
+        self.rotation_angle = 0
 
         self.GT_file.clicked.connect(self.open_gt_file)
         self.VIO_file.clicked.connect(self.open_vio_file)
@@ -98,13 +110,6 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.Start_from.valueChanged.connect(self.update_start_from)
         self.End_to.valueChanged.connect(self.update_end_to)
 
-        self.gt_file = gt_file
-        self.vio_file = vio_file
-
-        self.gt_data = gt_data
-        self.vio_data = vio_data
-        self.vio_rotated = self.vio_data.copy()
-
         self.x_scale = self.xscale_spinbox.value()
         self.y_scale = self.yscale_spinbox.value()
         self.offset = self.offset_spinbox.value()
@@ -126,33 +131,50 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.update_y_scale(1)
         self.update_x_scale(1)
 
-        self.ani_1 = FuncAnimation(self.canvas_3d.figure, self.Td_plot_data, frames=np.arange(0,360), repeat=1, interval=100, blit=True)  
-        self.ani_2 = FuncAnimation(self.canvas.figure, self.plot_data, frames=np.arange(0,1), repeat=1, interval=10, blit=True)  
+        self.ani_1 = FuncAnimation(self.canvas_3d.figure, self.Td_plot_data, frames=np.arange(0,1), repeat=1, interval=10, blit=0)  
+        self.ani_2 = FuncAnimation(self.canvas.figure, self.plot_data, frames=np.arange(0,1), repeat=1, interval=10, blit=0)  
     
     def open_gt_file(self):
+        self.ani_1.pause()
+        self.ani_2.pause()
         self.gt_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
                                     "Choose the GT path file",  
                                     self.cwd, # 起始路径 
-                                    "All Files (*);;Text Files (*.txt)")   # 设置文件扩展名过滤,用双分号间隔
+                                    "All Files (*);;Text Files (*.txt)")
 
         if self.gt_file == "":
             return
         
-        global gt_data
-        self.gt_data = pd.read_csv(self.gt_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
+        gt_data = pd.read_csv(self.gt_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
+        self.gt_data = gt_data.copy()
+
+        self.ani_1.resume()
+        self.ani_2.resume()
+
+        self.canvas_3d.figure.tight_figure()
 
     def open_vio_file(self):
+
+        self.ani_1.pause()
+        self.ani_2.pause()
         self.vio_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
                                     "Choose the VIO path file",  
                                     self.cwd, # 起始路径 
-                                    "All Files (*);;Text Files (*.txt)")   # 设置文件扩展名过滤,用双分号间隔
+                                    "All Files (*);;Text Files (*.txt)") 
 
         if self.vio_file == "":
             return
         
-        global vio_data
         vio_data = pd.read_csv(self.vio_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
-        self.end_to_index = len(self.vio_data['timestamp'])
+        self.vio_data = vio_data.copy()
+        self.end_to_index = max(self.vio_data['timestamp'])
+        self.start_from_index = min(self.vio_data['timestamp'])
+        
+        self.gt_shift = min(self.vio_data['timestamp'])
+        self.range = self.cal_vio_inter_value(100*100)-min(self.vio_data['timestamp'])
+
+        self.ani_1.resume()
+        self.ani_2.resume()
 
     def update_x_scale(self, value):
         self.x_scale = value  # Mapping slider value to a reasonable range
@@ -173,6 +195,11 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.vio_shifter.setValue(value)
 
     def cal_vio_inter_value(self, value):
+        
+        try:
+            max(self.vio_data['timestamp'])
+        except Exception:
+            return 0
         return (value/10000 * (max(self.vio_data['timestamp']) - min(self.vio_data['timestamp'])) + min(self.vio_data['timestamp']))
 
     def update_GT_shift(self, value):
@@ -236,7 +263,7 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         vio_compare_index = self.vio_rotated['timestamp']
         vio_compare_array = self.vio_rotated['px'] * self.y_scale
 
-        gt_indexs = [ (self.vio_rotated['timestamp'][0] + (i)/self.x_scale*10**8 - self.VIO_shift*10**7) for i in range(0, len(gt_data['timestamp']), 1)]
+        gt_indexs = [ (self.vio_rotated['timestamp'][0] + (i)/self.x_scale*10**8 - self.VIO_shift*10**7) for i in range(0, len(self.gt_data['timestamp']), 1)]
         gt_compare_array = self.gt_data['px']
 
         self.canvas.ax.clear()
@@ -279,7 +306,7 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.canvas_3d.perspection.plot(self.gt_data['px'], self.gt_data['py'])
         self.canvas_3d.perspection.plot(self.vio_rotated['px'], self.vio_rotated['py'])
 
-        angle = num
+        angle = self.rotation_angle
         # Normalize the angle to the range [-180, 180] for display
         angle_norm = (angle + 180) % 360 - 180
 
@@ -295,6 +322,8 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         #     roll = angle_norm
         else:
             azim = angle_norm
+
+        self.rotation_angle += 1
 
         self.canvas_3d.ax.view_init(30, azim)
 
