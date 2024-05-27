@@ -6,6 +6,6 @@
 真實軌跡格式:['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz' ]
 
 使用示範
--
-<video src='./source/demo1.mkv' width=640 height=480 controls>
----
+
+<video src=https://github.com/Jaron0211/vicon_alignment_tools/assets/20490986/50451c5c-28f5-41b7-9d1e-e05cb2effb12
+ controls="controls" width="500" height="300"></video>
