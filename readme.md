@@ -6,6 +6,6 @@
 真實軌跡格式:['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz' ]
 
 使用示範
+[demo1.webm](https://github.com/Jaron0211/vicon_alignment_tools/assets/20490986/2651fbfb-d859-42f3-8162-23b6d95a4a03)
 
-<video src=https://github.com/Jaron0211/vicon_alignment_tools/assets/20490986/50451c5c-28f5-41b7-9d1e-e05cb2effb12
- controls="controls" width="500" height="300"></video>
+<video src=[demo1.webm]  controls="controls" width="500" height="300"></video>
