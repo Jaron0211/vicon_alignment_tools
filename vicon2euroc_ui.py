@@ -22,10 +22,6 @@ best_error_sum = 9999999
 import pandas as pd
 import numpy as np
 
-import matplotlib
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-matplotlib.use("Qt5Agg")      # 表示使用 Qt5
-import matplotlib.pyplot as plt
 
 #Make plot quicker
 import matplotlib as mpl
@@ -40,9 +36,16 @@ from matplotlib.animation import FuncAnimation
 from PyQt5 import QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
+from PyQt5 import QtCore, QtGui, QtWidgets
 import sys
 import os
 import time
+
+import matplotlib
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+matplotlib.use("Qt5Agg")      # 表示使用 Qt5
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+import matplotlib.pyplot as plt
 
 from main_ui import Ui_VIO_alignment_Tool
 
@@ -50,7 +53,6 @@ from scipy.spatial.transform import Rotation as R
 from mpl_toolkits.mplot3d import axes3d
 
 ####--------------UI-----------------####
-from PyQt5 import QtCore, QtGui, QtWidgets
 
 ####--------------UI-----------------####
 
@@ -59,6 +61,29 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 # force finding, maybe change to the DTW method
 # https://tslearn.readthedocs.io/en/stable/user_guide/dtw.html
+
+class Csv_Manager():
+
+    def __init__(self, csv_file):
+
+        self.path_data = pd.read_csv(csv_file, header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+
+        self.name = csv_file.split('/')[-1].split('.')[0]
+
+        self.shift = 0
+        self.cache_data = self.path_data.copy()
+        self.y_scale = 1.0
+        self.x_scale = 1.0
+
+        self.z_rotate = 0
+        self.y_rotate = 0
+        self.x_rotate = 0
+    
+    def save_modify_csv(self, start_time, end_time):
+
+        self.cache_data[self.cache_data['timestamp'].between(start_time, end_time, inclusive="both")]
+
+        self.cache_data.to_csv("Aligned_{}.csv".format(self.name) ,index=False, header=None, float_format='%.9f')
 
 class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
     def __init__(self):
@@ -82,6 +107,8 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
 
         self.gt_E2Q_presave = self.vio_data.copy()
 
+        self.csv_dict = {}
+
         self.rotation_angle = 0
 
         self.GT_file.clicked.connect(self.open_gt_file)
@@ -91,9 +118,14 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.canvas_3d = FigureCanvas(plt.Figure())
         self.canvas.figure.set_facecolor("None")
         self.canvas.setStyleSheet("background-color:transparent;")
+        self.canvas_layout.addWidget(NavigationToolbar(self.canvas, self))
         self.canvas_3d.figure.set_facecolor("None")
         self.canvas_3d.setStyleSheet("background-color:transparent;")
         self.canvas.setMinimumSize(QtCore.QSize(200, 300))
+
+        self.canvas_3d.ax = self.canvas_3d.figure.add_subplot(122, projection='3d')
+        self.canvas_3d.perspection = self.canvas_3d.figure.add_subplot(121)
+        self.canvas.ax = self.canvas.figure.add_subplot(111)
 
         self.x_scale = 1
         self.y_scale = 1
@@ -101,9 +133,11 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.range = 100
         self.VIO_shift = 0
         self.gt_shift = 0
+        self.start_from_index = 0
+        self.end_to_index = 1.7*10**18
 
         self.canvas_3d_layout.addWidget(self.canvas_3d, 0, 0, 1, 1)
-        self.canvas_layout.addWidget(self.canvas, 0, 0, 1, 1)
+        self.canvas_layout.addWidget(self.canvas)
 
         self.yscale_spinbox.valueChanged.connect(self.update_y_scale)
         self.xscale_spinbox.valueChanged.connect(self.update_x_scale)
@@ -111,16 +145,10 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.range_spinbox.valueChanged.connect(self.update_range)
         self.range_spinbox.setValue(1000)
 
-        self.vio_shifter.valueChanged.connect(self.update_VIO_shift)
-        self.gt_shifter.valueChanged.connect(self.update_GT_shift)
-
         self.nav_offset_spinbox.valueChanged.connect(self.update_VIO_shift)
         self.offset_spinbox.valueChanged.connect(self.update_GT_shift)
 
         self.save_result.clicked.connect(self.save_alignment)
-
-        self.vio_shifter.setMaximum(10000)
-        self.gt_shifter.setMaximum(10000)
 
         self.nav_offset_spinbox.setMaximum(10000)
         self.offset_spinbox.setMaximum(10000)
@@ -132,15 +160,15 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.Yangle_spinbox.valueChanged.connect(self.process_data)
         self.Xangle_spinbox.valueChanged.connect(self.process_data)
 
+        self.listWidget_CsvList.itemClicked.connect(self.update_frame)
+        self.listWidget_CsvList.itemDoubleClicked.connect(self.remove_item)
+
+        self.dial_vio_shift.valueChanged.connect(self.vio_shift_update)
+        self.dial_gt_shift.valueChanged.connect(self.gt_shift_update)
+
         self.best_offset = 0
         self.best_error_sum = 9999999
 
-        self.canvas_3d.ax = self.canvas_3d.figure.add_subplot(122, projection='3d')
-        self.canvas_3d.perspection = self.canvas_3d.figure.add_subplot(121)
-        self.canvas.ax = self.canvas.figure.add_subplot(111)
-
-        self.start_from_index = 0
-        self.end_to_index = 1.7*10**18
         self.x_scale = self.xscale_spinbox.value()
         self.y_scale = self.yscale_spinbox.value()
         self.offset = self.offset_spinbox.value()
@@ -152,52 +180,73 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.update_y_scale(1)
         self.update_x_scale(1)
 
-        #self.ani_1 = FuncAnimation(self.canvas_3d.figure, self.rotated_figure, frames=np.arange(0,1), repeat=1, interval=50, blit=0)  
-        #self.ani_2 = FuncAnimation(self.canvas.figure, self.plot_data, frames=np.arange(0,1), repeat=1, interval=10, blit=0) 
+    def vio_shift_update(self, float):
+        return
+    
+    def gt_shift_update(self, float):
+        return
+
 
     def open_gt_file(self):
-        #self.ani_1.pause()
-        #self.ani_2.pause()
-        self.gt_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
+
+        gt_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
                                     "Choose the GT path file",  
                                     self.cwd, # 起始路径 
                                     "All Files (*);;Text Files (*.txt)")
-
-        #self.ani_1.resume()
-        #self.ani_2.resume()
-
-        if self.gt_file == "":
+        
+        _name = gt_file.split('/')[-1]
+        if gt_file == "" or (_name in self.csv_dict):
             return
         
-        gt_data = pd.read_csv(self.gt_file, header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz' ])
-        self.gt_data = gt_data.copy()
+        self.csv_dict[_name] = Csv_Manager(gt_file)
 
+        name = gt_file.split('/')[-1]
+
+        self.listWidget_CsvList.addItem(name)
+        self.listWidget_CsvList.findItems(name, Qt.MatchExactly)[0].setForeground(Qt.red)
+        
         self.process_data()
 
     def open_vio_file(self):
 
         #self.ani_1.pause()
         #self.ani_2.pause()
-        self.vio_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
+        vio_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
                                     "Choose the VIO path file",  
                                     self.cwd, # 起始路径 
                                     "All Files (*);;Text Files (*.txt)") 
 
         #self.ani_1.resume()
         #self.ani_2.resume()
-
-        if self.vio_file == "":
+        _name = vio_file.split('/')[-1]
+        if vio_file == "" or (_name in self.csv_dict):
             return
         
-        vio_data = pd.read_csv(self.vio_file, header=None, names=['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz'])
-        self.vio_data = vio_data.copy()
-        self.end_to_index = max(self.vio_data['timestamp'])
-        self.start_from_index = min(self.vio_data['timestamp'])
-        
-        self.gt_shift = min(self.vio_data['timestamp'])
-        self.range = self.cal_vio_inter_value(100*100)-min(self.vio_data['timestamp'])
+        self.csv_dict[_name] = Csv_Manager(vio_file)
+        name = vio_file.split('/')[-1]
 
+        self.listWidget_CsvList.addItem(name)
+        self.listWidget_CsvList.findItems(name, Qt.MatchExactly)[0].setForeground(Qt.gray)
+
+    def remove_item(self, item):
+
+        target = item.text()
+        self.csv_dict.pop(target)
+        self.listWidget_CsvList.takeItem(self.listWidget_CsvList.currentRow())
         self.process_data()
+
+    def update_frame(self, item):
+        
+        target = item.text()
+        csv_class = self.csv_dict[target]
+
+        self.Zangle_spinbox.setValue(csv_class.z_rotate)
+        self.Xangle_spinbox.setValue(csv_class.y_rotate)
+        self.Yangle_spinbox.setValue(csv_class.x_rotate)
+
+        self.xscale_spinbox.setValue(csv_class.x_scale)
+        self.yscale_spinbox.setValue(csv_class.y_scale)
+
 
     def update_x_scale(self, value):
         self.x_scale = value  # Mapping slider value to a reasonable range
@@ -288,19 +337,23 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         ## 2D timimg
         
         self.canvas.ax.clear()
-        self.canvas.ax.scatter(self.gt_presave_cache['timestamp']   , self.gt_presave_cache['px']   , color='r', marker='o', s=.1)
-        self.canvas.ax.scatter(self.vio_presave_cache['timestamp']  , self.vio_presave_cache['px']  , color='g', marker='o', s=.1)
+        legend = []
 
+        for name, csv in self.csv_dict.items():
+        
+            self.canvas.ax.scatter(csv.cache_data['timestamp'], csv.cache_data['px'], marker='o', s=1)
+            legend.append(name)
+
+        self.canvas.ax.legend(legend)
         self.canvas.ax.set_xlabel('Time')
         self.canvas.ax.set_ylabel('Position')
-        self.canvas.ax.legend(['Groundtruth Path', 'VIO Path'])
-
-        self.canvas.ax.set_xlim([self.gt_shift, self.gt_shift+self.range])
+        self.canvas.ax.grid(True)   
+        self.canvas.figure.tight_layout()
+        self.canvas.ax.relim()
+        self.start_from_index, self.end_to_index = self.canvas.ax.get_xlim()
+        self.canvas.ax.autoscale_view()
         self.canvas.ax.axvline(x = self.start_from_index, color = 'r')
         self.canvas.ax.axvline(x = self.end_to_index, color = 'b')
-
-        self.canvas.ax.grid(True)
-        self.canvas.figure.tight_layout()
         self.canvas.draw()
 
         return [self.canvas.ax]
@@ -310,8 +363,8 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         ## 3D R|T
         self.canvas_3d.ax.clear()
         #self.canvas_3d.ax.disable_mouse_rotation()
-        self.canvas_3d.ax.plot(self.gt_presave_cache['px'], self.gt_presave_cache['py'], self.gt_presave_cache['pz'], color = 'r', label='Groundtruth Path')
-        self.canvas_3d.ax.scatter(self.vio_presave_cache['px'], self.vio_presave_cache['py'], self.vio_presave_cache['pz'],color = 'g', s=.3, label='VIO Path')
+        self.canvas_3d.ax.plot(self.gt_presave_cache['px'].to_numpy(), self.gt_presave_cache['py'].to_numpy(), self.gt_presave_cache['pz'].to_numpy(), color = 'r', label='Groundtruth Path')
+        self.canvas_3d.ax.scatter(self.vio_presave_cache['px'].to_numpy(), self.vio_presave_cache['py'].to_numpy(), self.vio_presave_cache['pz'].to_numpy(),color = 'g', s=.3, label='VIO Path')
 
         self.canvas_3d.ax.set_xlabel('X(m)')
         self.canvas_3d.ax.set_ylabel('Y(m)')
@@ -323,8 +376,8 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.canvas_3d.perspection.grid(True)
         self.canvas_3d.perspection.set_xlabel('X(m)')
         self.canvas_3d.perspection.set_ylabel('Y(m)')
-        self.canvas_3d.perspection.plot(self.gt_presave_cache['px'], self.gt_presave_cache['py'], color = 'r')
-        self.canvas_3d.perspection.plot(self.vio_presave_cache['px'], self.vio_presave_cache['py'], color = 'g')
+        self.canvas_3d.perspection.plot(self.gt_presave_cache['px'].to_numpy(), self.gt_presave_cache['py'].to_numpy(), color = 'r')
+        self.canvas_3d.perspection.plot(self.vio_presave_cache['px'].to_numpy(), self.vio_presave_cache['py'].to_numpy(), color = 'g')
         
         self.canvas_3d.figure.tight_layout()
         self.canvas_3d.draw()

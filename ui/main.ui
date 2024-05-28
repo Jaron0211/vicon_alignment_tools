@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>789</width>
-    <height>896</height>
+    <width>1127</width>
+    <height>805</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -45,14 +45,49 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
-    <item row="8" column="3">
+    <item row="10" column="3">
      <widget class="QSpinBox" name="offset_spinbox">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
       <property name="maximum">
        <number>10000</number>
       </property>
      </widget>
     </item>
-    <item row="11" column="1">
+    <item row="9" column="3">
+     <widget class="QLabel" name="label_6">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>Shift GT data</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="2" colspan="2">
+     <widget class="QLabel" name="label_11">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>Csv File List</string>
+      </property>
+     </widget>
+    </item>
+    <item row="13" column="1">
      <widget class="QSlider" name="Start_from">
       <property name="maximum">
        <number>100</number>
@@ -65,26 +100,53 @@
       </property>
      </widget>
     </item>
-    <item row="2" column="2">
-     <widget class="QPushButton" name="GT_file">
-      <property name="text">
-       <string>Open GT file</string>
+    <item row="7" column="3">
+     <widget class="QSpinBox" name="range_spinbox">
+      <property name="maximum">
+       <number>10000</number>
+      </property>
+      <property name="value">
+       <number>1</number>
       </property>
      </widget>
     </item>
-    <item row="9" column="2" colspan="2">
-     <widget class="QSlider" name="gt_shifter">
-      <property name="minimumSize">
-       <size>
-        <width>200</width>
-        <height>0</height>
-       </size>
+    <item row="5" column="2">
+     <widget class="QLabel" name="label_2">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
       </property>
-      <property name="maximumSize">
-       <size>
-        <width>300</width>
-        <height>16777215</height>
-       </size>
+      <property name="text">
+       <string>Y_scale</string>
+      </property>
+     </widget>
+    </item>
+    <item row="13" column="0">
+     <widget class="QLabel" name="label_3">
+      <property name="text">
+       <string>Start From</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="2">
+     <widget class="QLabel" name="label_4">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>Show range(%)</string>
+      </property>
+     </widget>
+    </item>
+    <item row="14" column="1">
+     <widget class="QSlider" name="End_to">
+      <property name="maximum">
+       <number>100</number>
       </property>
       <property name="pageStep">
        <number>1</number>
@@ -92,9 +154,39 @@
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
       </property>
+      <property name="invertedAppearance">
+       <bool>true</bool>
+      </property>
      </widget>
     </item>
-    <item row="4" column="3">
+    <item row="8" column="2" colspan="2">
+     <widget class="Line" name="line">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="10" column="2">
+     <widget class="QSpinBox" name="nav_offset_spinbox">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="value">
+       <number>0</number>
+      </property>
+     </widget>
+    </item>
+    <item row="12" column="2" colspan="2">
+     <widget class="Line" name="line_2">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="3">
      <widget class="QDoubleSpinBox" name="xscale_spinbox">
       <property name="decimals">
        <number>4</number>
@@ -110,8 +202,45 @@
       </property>
      </widget>
     </item>
-    <item row="8" column="2">
-     <widget class="QLabel" name="label_6">
+    <item row="14" column="0">
+     <widget class="QLabel" name="label_7">
+      <property name="text">
+       <string>End To</string>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="2">
+     <widget class="QLabel" name="label_5">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>Shift VIO data</string>
+      </property>
+     </widget>
+    </item>
+    <item row="11" column="3">
+     <widget class="QDial" name="dial_gt_shift">
+      <property name="wrapping">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="2" colspan="2">
+     <widget class="QListWidget" name="listWidget_CsvList"/>
+    </item>
+    <item row="2" column="2" colspan="2">
+     <widget class="Line" name="line_3">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="2">
+     <widget class="QLabel" name="label">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
         <horstretch>0</horstretch>
@@ -119,93 +248,11 @@
        </sizepolicy>
       </property>
       <property name="text">
-       <string>Shift GT data</string>
+       <string>X scale</string>
       </property>
      </widget>
     </item>
-    <item row="11" column="0">
-     <widget class="QLabel" name="label_3">
-      <property name="text">
-       <string>Start From</string>
-      </property>
-     </widget>
-    </item>
-    <item row="2" column="3">
-     <widget class="QPushButton" name="VIO_file">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Open VIO path</string>
-      </property>
-     </widget>
-    </item>
-    <item row="5" column="2">
-     <widget class="QLabel" name="label_4">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Show range</string>
-      </property>
-     </widget>
-    </item>
-    <item row="11" column="2" rowspan="2" colspan="2">
-     <widget class="QPushButton" name="save_result">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Save Result</string>
-      </property>
-     </widget>
-    </item>
-    <item row="5" column="3">
-     <widget class="QSpinBox" name="range_spinbox">
-      <property name="maximum">
-       <number>10000</number>
-      </property>
-      <property name="value">
-       <number>1</number>
-      </property>
-     </widget>
-    </item>
-    <item row="6" column="3">
-     <widget class="QSpinBox" name="nav_offset_spinbox">
-      <property name="value">
-       <number>0</number>
-      </property>
-     </widget>
-    </item>
-    <item row="3" column="3">
-     <widget class="QDoubleSpinBox" name="yscale_spinbox">
-      <property name="decimals">
-       <number>4</number>
-      </property>
-      <property name="minimum">
-       <double>0.000000000000000</double>
-      </property>
-      <property name="maximum">
-       <double>100.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.100000000000000</double>
-      </property>
-      <property name="value">
-       <double>1.000000000000000</double>
-      </property>
-     </widget>
-    </item>
-    <item row="1" column="0" colspan="4">
+    <item row="3" column="0" colspan="2">
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <property name="spacing">
        <number>6</number>
@@ -303,102 +350,76 @@
      </layout>
     </item>
     <item row="3" column="2">
-     <widget class="QLabel" name="label_2">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
+     <widget class="QPushButton" name="GT_file">
       <property name="text">
-       <string>Y_scale</string>
+       <string>Open GT file</string>
       </property>
      </widget>
     </item>
-    <item row="6" column="2">
-     <widget class="QLabel" name="label_5">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Shift VIO data</string>
-      </property>
-     </widget>
-    </item>
-    <item row="4" column="2">
-     <widget class="QLabel" name="label">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>X scale</string>
-      </property>
-     </widget>
-    </item>
-    <item row="12" column="1">
-     <widget class="QSlider" name="End_to">
-      <property name="maximum">
-       <number>100</number>
-      </property>
-      <property name="pageStep">
-       <number>1</number>
-      </property>
+    <item row="11" column="2">
+     <widget class="QDial" name="dial_vio_shift">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
       </property>
-      <property name="invertedAppearance">
+      <property name="wrapping">
        <bool>true</bool>
       </property>
      </widget>
     </item>
-    <item row="7" column="2" colspan="2">
-     <widget class="QSlider" name="vio_shifter">
-      <property name="minimumSize">
-       <size>
-        <width>200</width>
-        <height>0</height>
-       </size>
+    <item row="13" column="2" rowspan="2" colspan="2">
+     <widget class="QPushButton" name="save_result">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
       </property>
-      <property name="maximumSize">
-       <size>
-        <width>300</width>
-        <height>16777215</height>
-       </size>
-      </property>
-      <property name="pageStep">
-       <number>1</number>
-      </property>
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-     </widget>
-    </item>
-    <item row="12" column="0">
-     <widget class="QLabel" name="label_7">
       <property name="text">
-       <string>End To</string>
+       <string>Save Result</string>
       </property>
      </widget>
     </item>
-    <item row="2" column="0" rowspan="8" colspan="2">
-     <layout class="QGridLayout" name="canvas_layout">
-      <property name="sizeConstraint">
-       <enum>QLayout::SetMaximumSize</enum>
+    <item row="3" column="3">
+     <widget class="QPushButton" name="VIO_file">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
       </property>
-     </layout>
+      <property name="text">
+       <string>Open VIO path</string>
+      </property>
+     </widget>
     </item>
-    <item row="0" column="0" colspan="4">
+    <item row="0" column="0" rowspan="3" colspan="2">
      <layout class="QGridLayout" name="canvas_3d_layout">
       <property name="sizeConstraint">
        <enum>QLayout::SetMaximumSize</enum>
       </property>
      </layout>
+    </item>
+    <item row="5" column="3">
+     <widget class="QDoubleSpinBox" name="yscale_spinbox">
+      <property name="decimals">
+       <number>4</number>
+      </property>
+      <property name="minimum">
+       <double>0.000000000000000</double>
+      </property>
+      <property name="maximum">
+       <double>100.000000000000000</double>
+      </property>
+      <property name="singleStep">
+       <double>0.100000000000000</double>
+      </property>
+      <property name="value">
+       <double>1.000000000000000</double>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="0" rowspan="8" colspan="2">
+     <layout class="QVBoxLayout" name="canvas_layout"/>
     </item>
    </layout>
   </widget>
@@ -407,7 +428,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>789</width>
+     <width>1127</width>
      <height>21</height>
     </rect>
    </property>
