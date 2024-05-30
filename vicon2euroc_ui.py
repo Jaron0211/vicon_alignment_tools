@@ -68,8 +68,8 @@ class Csv_Manager():
 
         self.path_data = pd.read_csv(csv_file, header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
 
-        self.name = csv_file.split('/')[-1].split('.')[0]
-
+        self.len = len(self.path_data['timestamp'])
+        
         self.shift = 0
         self.cache_data = self.path_data.copy()
         self.y_scale = 1.0
@@ -81,9 +81,23 @@ class Csv_Manager():
     
     def save_modify_csv(self, start_time, end_time):
 
-        self.cache_data[self.cache_data['timestamp'].between(start_time, end_time, inclusive="both")]
-
+        self.cache_data[self.cache_data['timestamp'].between(start_time, end_time, inclusive="both")]    
         self.cache_data.to_csv("Aligned_{}.csv".format(self.name) ,index=False, header=None, float_format='%.9f')
+    
+    def process_data(self):
+
+        rotated_coordinates_xyz = np.column_stack((self.path_data['px'], self.path_data['py'], self.path_data['pz']))
+        rotation_xyz = R.from_euler('ZYX', [self.z_rotate,self.y_rotate,self.x_rotate], degrees=True)
+        rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
+        
+        self.cache_data[['px','py','pz']] = rotated_coordinates_xyz * self.y_scale
+        self.cache_data['timestamp'] = self.path_data['timestamp'] + self.shift
+    
+    def create_timestamp_via_Hz(self, start_time, hz = 100):
+
+        self.cache_data['timestamp'] = [ (start_time + (i)/self.x_scale*10**8 + self.shift*10**7) for i in range(0, self.len, 1)]
+
+
 
 class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
     def __init__(self):
@@ -108,6 +122,9 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.gt_E2Q_presave = self.vio_data.copy()
 
         self.csv_dict = {}
+        self.current_item = ''
+        self.gt_item = ''
+        self.gt_first_timestamp = 0
 
         self.rotation_angle = 0
 
@@ -150,15 +167,17 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
 
         self.save_result.clicked.connect(self.save_alignment)
 
-        self.nav_offset_spinbox.setMaximum(10000)
-        self.offset_spinbox.setMaximum(10000)
+        self.Start_from.sliderMoved.connect(self.update_start_from_and_end_to)
+        self.Start_from.setMaximum(10000)
+        self.Start_from.setMinimum(0)
 
-        self.Start_from.valueChanged.connect(self.update_start_from)
-        self.End_to.valueChanged.connect(self.update_end_to)
+        self.End_to.sliderMoved.connect(self.update_start_from_and_end_to)
+        self.End_to.setMaximum(10000)
+        self.End_to.setMinimum(0)
 
-        self.Zangle_spinbox.valueChanged.connect(self.process_data)
-        self.Yangle_spinbox.valueChanged.connect(self.process_data)
-        self.Xangle_spinbox.valueChanged.connect(self.process_data)
+        self.Zangle_spinbox.valueChanged.connect(self.update_rotation)
+        self.Yangle_spinbox.valueChanged.connect(self.update_rotation)
+        self.Xangle_spinbox.valueChanged.connect(self.update_rotation)
 
         self.listWidget_CsvList.itemClicked.connect(self.update_frame)
         self.listWidget_CsvList.itemDoubleClicked.connect(self.remove_item)
@@ -166,8 +185,8 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.dial_vio_shift.valueChanged.connect(self.vio_shift_update)
         self.dial_gt_shift.valueChanged.connect(self.gt_shift_update)
 
-        self.best_offset = 0
-        self.best_error_sum = 9999999
+        self.vio_shift_last = 0
+        self.gt_shift_last = 0
 
         self.x_scale = self.xscale_spinbox.value()
         self.y_scale = self.yscale_spinbox.value()
@@ -180,12 +199,36 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.update_y_scale(1)
         self.update_x_scale(1)
 
-    def vio_shift_update(self, float):
+    def vio_shift_update(self, value):
+
+        if value - self.vio_shift_last > 0:
+            self.offset_spinbox.setValue(self.offset_spinbox.value()+1)
+        elif value - self.vio_shift_last < 0:
+            self.offset_spinbox.setValue(self.offset_spinbox.value()-1)
+
+        self.vio_shift_last = value
         return
     
-    def gt_shift_update(self, float):
+    def gt_shift_update(self, value):
+        
+        if value - self.gt_shift_last > 0:
+            self.nav_offset_spinbox.setValue(self.nav_offset_spinbox.value()+1)
+        elif value - self.vio_shift_last < 0:
+            self.nav_offset_spinbox.setValue(self.nav_offset_spinbox.value()-1)
+
+        self.gt_shift_last = value
         return
 
+    def update_gt_timestamp(self, timestamp):
+
+        if type(timestamp) not in [ float , int ]:
+            print('type error')
+            return
+
+        if self.gt_first_timestamp == 0 and self.gt_file != '':
+            self.gt_first_timestamp = timestamp
+            self.csv_dict[self.gt_file].create_timestamp_via_Hz(timestamp)
+            print('create timestamp')
 
     def open_gt_file(self):
 
@@ -200,11 +243,10 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         
         self.csv_dict[_name] = Csv_Manager(gt_file)
 
-        name = gt_file.split('/')[-1]
+        self.listWidget_CsvList.addItem(_name)
+        self.listWidget_CsvList.findItems(_name, Qt.MatchExactly)[0].setForeground(Qt.red)
+        self.gt_item = _name
 
-        self.listWidget_CsvList.addItem(name)
-        self.listWidget_CsvList.findItems(name, Qt.MatchExactly)[0].setForeground(Qt.red)
-        
         self.process_data()
 
     def open_vio_file(self):
@@ -223,10 +265,10 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
             return
         
         self.csv_dict[_name] = Csv_Manager(vio_file)
-        name = vio_file.split('/')[-1]
-
-        self.listWidget_CsvList.addItem(name)
-        self.listWidget_CsvList.findItems(name, Qt.MatchExactly)[0].setForeground(Qt.gray)
+        self.listWidget_CsvList.addItem(_name)
+        self.listWidget_CsvList.findItems(_name, Qt.MatchExactly)[0].setForeground(Qt.gray)
+        self.update_gt_timestamp(min(self.csv_dict[_name].path_data['timestamp']))
+        self.process_data()
 
     def remove_item(self, item):
 
@@ -238,6 +280,8 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
     def update_frame(self, item):
         
         target = item.text()
+        self.current_item = target
+        print(target)
         csv_class = self.csv_dict[target]
 
         self.Zangle_spinbox.setValue(csv_class.z_rotate)
@@ -247,28 +291,28 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.xscale_spinbox.setValue(csv_class.x_scale)
         self.yscale_spinbox.setValue(csv_class.y_scale)
 
-
     def update_x_scale(self, value):
-        self.x_scale = value  # Mapping slider value to a reasonable range
+
+        if self.current_item == '':
+                return 
+        
+        self.csv_dict[self.current_item].x_scale = value  # Mapping slider value to a reasonable range
         self.process_data()
 
     def update_y_scale(self, value):
-        self.y_scale = value  # Mapping slider value to a reasonable range
-        self.process_data()
-    
-    def update_offset(self, value):
-        self.offset = value
+
+        if self.current_item == '':
+                return
+        
+        self.csv_dict[self.current_item].y_scale = value
         self.process_data()
 
     def update_range(self, value):
-        self.range = self.cal_vio_inter_value(value*100)-min(self.vio_data['timestamp'])
-        self.process_data()
-    
-    def update_VIO_shift(self, value):
-        self.VIO_shift = value
 
-        self.nav_offset_spinbox.setValue(value)
-        self.vio_shifter.setValue(value)
+        if self.current_item == '':
+                return
+        
+        self.range = self.cal_vio_inter_value(value*100)-min(self.vio_data['timestamp'])
         self.process_data()
 
     def cal_vio_inter_value(self, value):
@@ -279,20 +323,24 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
             return 0
         return (value/10000 * (max(self.vio_data['timestamp']) - min(self.vio_data['timestamp'])) + min(self.vio_data['timestamp']))
 
-    def update_GT_shift(self, value):
+    def update_VIO_shift(self, value):
+        if self.current_item == '':
+                return
+        
+        self.csv_dict[self.current_item].shift = value
 
-        self.gt_shift = self.cal_vio_inter_value(value)
-
-        self.offset_spinbox.setValue(value)
-        self.gt_shifter.setValue(value)
-
-        self.start_from_index = self.cal_vio_inter_value(self.Start_from.value()) + self.gt_shift
-        self.end_to_index = max(self.vio_data['timestamp']) - self.cal_vio_inter_value(self.End_to.value())
         self.process_data()
 
-    def update_start_from(self, value):
-        self.Start_from.setMaximum(10000)
-        self.Start_from.setMinimum(0)
+    def update_GT_shift(self, value):
+
+        if self.gt_item == '':
+                return
+        
+        self.csv_dict[self.gt_item].shift = value
+        self.process_data()
+
+    def update_end_to(self, value):
+        
 
         new_index = self.cal_vio_inter_value(value)
 
@@ -302,33 +350,34 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
             self.start_from_index = self.end_to_index
         self.process_data()
 
-    def update_end_to(self, value):
-        self.End_to.setMaximum(10000)
-        self.End_to.setMinimum(0)
+    def update_start_from_and_end_to(self, value):
 
-        new_index = max(self.vio_data['timestamp']) + self.gt_shift - self.cal_vio_inter_value(value)
+        [x_min ,x_max ] = self.canvas.ax.get_xlim()
 
-        if new_index > self.start_from_index:
-            self.end_to_index = new_index
-        else:
-            self.end_to_index = self.start_from_index
+        self.start_from_index =  x_min + self.Start_from.value() /10000 * (x_max - x_min)
+        self.end_to_index = x_max - self.End_to.value() /10000 * (x_max - x_min)
+
+        if self.start_from_index > self.end_to_index:
+            self.start_from_index = self.end_to_index
+
+        print(self.start_from_index, self.end_to_index)
+
+        self.process_data()
+
+    def update_rotation(self):
+
+        if self.current_item == '':
+                return
+        
+        self.csv_dict[self.current_item].z_rotate = self.Zangle_spinbox.value()  # Mapping slider value to a reasonable range
+        self.csv_dict[self.current_item].y_rotate = self.Yangle_spinbox.value()
+        self.csv_dict[self.current_item].x_rotate = self.Xangle_spinbox.value()
         self.process_data()
 
     def process_data(self):
 
-        self.vio_presave_cache = self.vio_data.copy()
-        self.gt_presave_cache  = self.gt_data.copy()
-
-        #VIO rotate
-        rotated_coordinates_xyz = np.column_stack((self.vio_data['px'], self.vio_data['py'], self.vio_data['pz']))
-        rotation_xyz = R.from_euler('ZYX', [self.Zangle_spinbox.value(),self.Yangle_spinbox.value(),self.Xangle_spinbox.value()], degrees=True)
-        rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
-        
-        self.vio_presave_cache[['px','py','pz']] = rotated_coordinates_xyz
-
-        #GT re-scale
-        self.gt_presave_cache['timestamp']  = [ (self.vio_presave_cache['timestamp'][0] + (i)/self.x_scale*10**8 - self.VIO_shift*10**7) for i in range(0, len(self.gt_data['timestamp']), 1)]
-        self.gt_presave_cache[['px','py','pz']] *= self.y_scale
+        for name, csv in self.csv_dict.items():
+            csv.process_data()
 
         self.plot_data()
         self.Td_plot_data()
@@ -339,8 +388,14 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.canvas.ax.clear()
         legend = []
 
+        min_val = [ min(value.cache_data['timestamp']) for _, value in self.csv_dict.items() if str(min(value.cache_data['timestamp'])) != 'nan']
+        max_val = [ max(value.cache_data['timestamp']) for _, value in self.csv_dict.items() if str(max(value.cache_data['timestamp'])) != 'nan']
+
+        self.canvas.ax.set_xlim([min(min_val), max(max_val)])
+
         for name, csv in self.csv_dict.items():
-        
+            if type(csv) != Csv_Manager:
+                continue 
             self.canvas.ax.scatter(csv.cache_data['timestamp'], csv.cache_data['px'], marker='o', s=1)
             legend.append(name)
 
@@ -349,39 +404,41 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.canvas.ax.set_ylabel('Position')
         self.canvas.ax.grid(True)   
         self.canvas.figure.tight_layout()
-        self.canvas.ax.relim()
-        self.start_from_index, self.end_to_index = self.canvas.ax.get_xlim()
+        
         self.canvas.ax.autoscale_view()
         self.canvas.ax.axvline(x = self.start_from_index, color = 'r')
         self.canvas.ax.axvline(x = self.end_to_index, color = 'b')
         self.canvas.draw()
-
-        return [self.canvas.ax]
     
     def Td_plot_data(self, num = 0):
 
         ## 3D R|T
         self.canvas_3d.ax.clear()
-        #self.canvas_3d.ax.disable_mouse_rotation()
-        self.canvas_3d.ax.plot(self.gt_presave_cache['px'].to_numpy(), self.gt_presave_cache['py'].to_numpy(), self.gt_presave_cache['pz'].to_numpy(), color = 'r', label='Groundtruth Path')
-        self.canvas_3d.ax.scatter(self.vio_presave_cache['px'].to_numpy(), self.vio_presave_cache['py'].to_numpy(), self.vio_presave_cache['pz'].to_numpy(),color = 'g', s=.3, label='VIO Path')
+        legend = []
+
+        self.canvas_3d.ax.legend(legend)
+        self.canvas_3d.ax.set_facecolor("None")
+
+        for name, csv in self.csv_dict.items():
+            if type(csv) != Csv_Manager:
+                continue
+            self.canvas_3d.ax.scatter(csv.cache_data['px'], csv.cache_data['py'], csv.cache_data['pz'], marker='o', s=1)
+            self.canvas_3d.perspection.plot(csv.cache_data['px'].to_numpy(), csv.cache_data['py'].to_numpy())
+        
+            legend.append(name)
 
         self.canvas_3d.ax.set_xlabel('X(m)')
         self.canvas_3d.ax.set_ylabel('Y(m)')
         self.canvas_3d.ax.set_zlabel('Z(m)')
-        self.canvas_3d.ax.legend(['Groundtruth Path', "VIO Path"])
-        self.canvas_3d.ax.set_facecolor("None")
+        self.canvas_3d.ax.legend(legend)
 
         self.canvas_3d.perspection.clear()
         self.canvas_3d.perspection.grid(True)
         self.canvas_3d.perspection.set_xlabel('X(m)')
         self.canvas_3d.perspection.set_ylabel('Y(m)')
-        self.canvas_3d.perspection.plot(self.gt_presave_cache['px'].to_numpy(), self.gt_presave_cache['py'].to_numpy(), color = 'r')
-        self.canvas_3d.perspection.plot(self.vio_presave_cache['px'].to_numpy(), self.vio_presave_cache['py'].to_numpy(), color = 'g')
-        
-        self.canvas_3d.figure.tight_layout()
+         
+        #self.canvas_3d.figure.tight_layout()
         self.canvas_3d.draw()
-        return [self.canvas_3d.ax, self.canvas_3d.perspection]
     
     def rotated_figure(self, num):
 
