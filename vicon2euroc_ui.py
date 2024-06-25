@@ -26,6 +26,7 @@ import numpy as np
 #Make plot quicker
 import matplotlib as mpl
 import matplotlib.style as mplstyle
+
 mplstyle.use(['fast'])
 mpl.rcParams['path.simplify'] = True
 mpl.rcParams['path.simplify_threshold'] = 1.0
@@ -40,6 +41,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 import sys
 import os
 import time
+import asyncio
+import timeit
 
 import matplotlib
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -51,6 +54,8 @@ from main_ui import Ui_VIO_alignment_Tool
 
 from scipy.spatial.transform import Rotation as R
 from mpl_toolkits.mplot3d import axes3d
+
+import multiprocessing, threading
 
 ####--------------UI-----------------####
 
@@ -68,35 +73,69 @@ class Csv_Manager():
 
         self.path_data = pd.read_csv(csv_file, header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
 
+        self.name = csv_file.split('/')[-1]
         self.len = len(self.path_data['timestamp'])
         
         self.shift = 0
         self.cache_data = self.path_data.copy()
+
+        self.interpolation_timestamp = pd.Series()
+
         self.y_scale = 1.0
         self.x_scale = 1.0
+
+        self.y_scale_pre = self.y_scale
+        self.x_scale_pre = self.x_scale
 
         self.z_rotate = 0
         self.y_rotate = 0
         self.x_rotate = 0
+
+        self.delta_time = self.path_data['timestamp'].diff()
     
     def save_modify_csv(self, start_time, end_time):
 
-        self.cache_data[self.cache_data['timestamp'].between(start_time, end_time, inclusive="both")]    
+        self.cache_data[self.cache_data['timestamp'].between(start_time, end_time, inclusive="both")]
+        self.cache_data['timestamp'] = self.cache_data['timestamp'].astype(float)  
         self.cache_data.to_csv("Aligned_{}.csv".format(self.name) ,index=False, header=None, float_format='%.9f')
-    
-    def process_data(self):
-
-        rotated_coordinates_xyz = np.column_stack((self.path_data['px'], self.path_data['py'], self.path_data['pz']))
-        rotation_xyz = R.from_euler('ZYX', [self.z_rotate,self.y_rotate,self.x_rotate], degrees=True)
-        rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
         
-        self.cache_data[['px','py','pz']] = rotated_coordinates_xyz * self.y_scale
-        self.cache_data['timestamp'] = self.path_data['timestamp'] + self.shift
-    
+    def process_data(self):
+        
+        def job():
+            
+            start = time.time()
+            rotated_coordinates_xyz = np.column_stack((self.path_data['px'], self.path_data['py'], self.path_data['pz']))
+            rotation_xyz = R.from_euler('ZYX', [self.z_rotate,self.y_rotate,self.x_rotate], degrees=True)
+            rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
+            
+            self.cache_data[['px','py','pz']] = rotated_coordinates_xyz * self.y_scale
+
+            _starttime = self.path_data['timestamp'][0]
+
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+
+            def iterrator(i):
+                self.interpolation_timestamp[i] = self.interpolation_timestamp[i-1] + self.delta_time[i] * self.x_scale 
+
+            def looper():
+                self.interpolation_timestamp[0] = _starttime + self.shift
+                [iterrator(i) for i in range(1, len(self.path_data['timestamp']),1)]
+            
+            looper()
+
+            self.cache_data['timestamp'] = self.interpolation_timestamp 
+
+            print(self.name , ' time spend: ', time.time() - start)
+            
+
+        worker = threading.Thread(target=job)
+        worker.start()
+
     def create_timestamp_via_Hz(self, start_time, hz = 100):
 
-        self.cache_data['timestamp'] = [ (start_time + (i)/self.x_scale*10**8 + self.shift*10**7) for i in range(0, self.len, 1)]
-
+        self.path_data['timestamp'] = [ (start_time + (i)/self.x_scale*10**6) for i in range(0, self.len, 1)]
+        self.delta_time = self.path_data['timestamp'].diff()
 
 
 class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
@@ -123,7 +162,6 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
 
         self.csv_dict = {}
         self.current_item = ''
-        self.gt_item = ''
         self.gt_first_timestamp = 0
 
         self.rotation_angle = 0
@@ -162,8 +200,8 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.range_spinbox.valueChanged.connect(self.update_range)
         self.range_spinbox.setValue(1000)
 
-        self.nav_offset_spinbox.valueChanged.connect(self.update_VIO_shift)
-        self.offset_spinbox.valueChanged.connect(self.update_GT_shift)
+        #self.nav_offset_spinbox.valueChanged.connect(self.update_VIO_shift)
+        #self.offset_spinbox.valueChanged.connect(self.update_GT_shift)
 
         self.save_result.clicked.connect(self.save_alignment)
 
@@ -199,6 +237,14 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.update_y_scale(1)
         self.update_x_scale(1)
 
+        self.process_worker = threading.Thread(target=self.process_data_looper)
+        self.process_worker.start()
+
+    def process_data_looper(self):
+
+        while 1:
+            self.process_data()
+
     def vio_shift_update(self, value):
 
         if value - self.vio_shift_last > 0:
@@ -211,10 +257,17 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
     
     def gt_shift_update(self, value):
         
-        if value - self.gt_shift_last > 0:
+        print(value - self.gt_shift_last)
+        if (value - self.gt_shift_last) > 0:
             self.nav_offset_spinbox.setValue(self.nav_offset_spinbox.value()+1)
-        elif value - self.vio_shift_last < 0:
+            if self.gt_file != '' : 
+                self.csv_dict[self.gt_file].shift += 100000000
+                print(self.csv_dict[self.gt_file].shift)
+        else:
             self.nav_offset_spinbox.setValue(self.nav_offset_spinbox.value()-1)
+            if self.gt_file != '' : 
+                self.csv_dict[self.gt_file].shift -= 100000000
+                print(self.csv_dict[self.gt_file].shift)
 
         self.gt_shift_last = value
         return
@@ -228,7 +281,6 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         if self.gt_first_timestamp == 0 and self.gt_file != '':
             self.gt_first_timestamp = timestamp
             self.csv_dict[self.gt_file].create_timestamp_via_Hz(timestamp)
-            print('create timestamp')
 
     def open_gt_file(self):
 
@@ -245,21 +297,15 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
 
         self.listWidget_CsvList.addItem(_name)
         self.listWidget_CsvList.findItems(_name, Qt.MatchExactly)[0].setForeground(Qt.red)
-        self.gt_item = _name
-
-        self.process_data()
+        self.gt_file = _name
 
     def open_vio_file(self):
 
-        #self.ani_1.pause()
-        #self.ani_2.pause()
         vio_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
                                     "Choose the VIO path file",  
                                     self.cwd, # 起始路径 
                                     "All Files (*);;Text Files (*.txt)") 
 
-        #self.ani_1.resume()
-        #self.ani_2.resume()
         _name = vio_file.split('/')[-1]
         if vio_file == "" or (_name in self.csv_dict):
             return
@@ -268,14 +314,12 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.listWidget_CsvList.addItem(_name)
         self.listWidget_CsvList.findItems(_name, Qt.MatchExactly)[0].setForeground(Qt.gray)
         self.update_gt_timestamp(min(self.csv_dict[_name].path_data['timestamp']))
-        self.process_data()
 
     def remove_item(self, item):
 
         target = item.text()
         self.csv_dict.pop(target)
         self.listWidget_CsvList.takeItem(self.listWidget_CsvList.currentRow())
-        self.process_data()
 
     def update_frame(self, item):
         
@@ -297,7 +341,6 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
                 return 
         
         self.csv_dict[self.current_item].x_scale = value  # Mapping slider value to a reasonable range
-        self.process_data()
 
     def update_y_scale(self, value):
 
@@ -305,7 +348,6 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
                 return
         
         self.csv_dict[self.current_item].y_scale = value
-        self.process_data()
 
     def update_range(self, value):
 
@@ -313,7 +355,6 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
                 return
         
         self.range = self.cal_vio_inter_value(value*100)-min(self.vio_data['timestamp'])
-        self.process_data()
 
     def cal_vio_inter_value(self, value):
         
@@ -329,15 +370,12 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         
         self.csv_dict[self.current_item].shift = value
 
-        self.process_data()
-
     def update_GT_shift(self, value):
 
-        if self.gt_item == '':
+        if self.gt_file == '':
                 return
         
-        self.csv_dict[self.gt_item].shift = value
-        self.process_data()
+        self.csv_dict[self.gt_file].shift = value
 
     def update_end_to(self, value):
         
@@ -348,7 +386,6 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
             self.start_from_index = new_index
         else:
             self.start_from_index = self.end_to_index
-        self.process_data()
 
     def update_start_from_and_end_to(self, value):
 
@@ -362,8 +399,6 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
 
         print(self.start_from_index, self.end_to_index)
 
-        self.process_data()
-
     def update_rotation(self):
 
         if self.current_item == '':
@@ -372,73 +407,92 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
         self.csv_dict[self.current_item].z_rotate = self.Zangle_spinbox.value()  # Mapping slider value to a reasonable range
         self.csv_dict[self.current_item].y_rotate = self.Yangle_spinbox.value()
         self.csv_dict[self.current_item].x_rotate = self.Xangle_spinbox.value()
-        self.process_data()
 
     def process_data(self):
 
-        for name, csv in self.csv_dict.items():
-            csv.process_data()
+        [ threading.Thread(target = csv.process_data).start() for name, csv in self.csv_dict.items()]
 
+        start = time.time()
         self.plot_data()
         self.Td_plot_data()
 
+        print('plot spend: ' , time.time() - start)
+
     def plot_data(self, num = 0):
         ## 2D timimg
-        
-        self.canvas.ax.clear()
-        legend = []
+        def job():
+            locker = threading.Lock()
+            locker.acquire()
+            
+            self.canvas.ax.clear()
+            legend = []
 
-        min_val = [ min(value.cache_data['timestamp']) for _, value in self.csv_dict.items() if str(min(value.cache_data['timestamp'])) != 'nan']
-        max_val = [ max(value.cache_data['timestamp']) for _, value in self.csv_dict.items() if str(max(value.cache_data['timestamp'])) != 'nan']
+            min_val = [ min(value.cache_data['timestamp']) for _, value in self.csv_dict.items() if str(min(value.cache_data['timestamp'])) != 'nan']
+            max_val = [ max(value.cache_data['timestamp']) for _, value in self.csv_dict.items() if str(max(value.cache_data['timestamp'])) != 'nan']
 
-        self.canvas.ax.set_xlim([min(min_val), max(max_val)])
+            if len(min_val) != 0:
+                self.canvas.ax.set_xlim([min(min_val), max(max_val)])
 
-        for name, csv in self.csv_dict.items():
-            if type(csv) != Csv_Manager:
-                continue 
-            self.canvas.ax.scatter(csv.cache_data['timestamp'], csv.cache_data['px'], marker='o', s=1)
-            legend.append(name)
+            for name, csv in list(self.csv_dict.items()):
+                if type(csv) != Csv_Manager:
+                    continue 
 
-        self.canvas.ax.legend(legend)
-        self.canvas.ax.set_xlabel('Time')
-        self.canvas.ax.set_ylabel('Position')
-        self.canvas.ax.grid(True)   
-        self.canvas.figure.tight_layout()
-        
-        self.canvas.ax.autoscale_view()
-        self.canvas.ax.axvline(x = self.start_from_index, color = 'r')
-        self.canvas.ax.axvline(x = self.end_to_index, color = 'b')
-        self.canvas.draw()
+                self.canvas.ax.plot(csv.cache_data['timestamp'][0::5], csv.cache_data['px'][0::5])
+                legend.append(name)
+
+            self.canvas.ax.legend(legend)
+            self.canvas.ax.set_xlabel('Time')
+            self.canvas.ax.set_ylabel('Position')
+            self.canvas.ax.grid(True)   
+            self.canvas.figure.tight_layout()
+            
+            self.canvas.ax.autoscale_view()
+            self.canvas.ax.axvline(x = self.start_from_index, color = 'r')
+            self.canvas.ax.axvline(x = self.end_to_index, color = 'b')
+            self.canvas.draw()
+
+            locker.release()
+
+        worker = threading.Thread(target=job)
+        worker.run()
     
     def Td_plot_data(self, num = 0):
 
         ## 3D R|T
-        self.canvas_3d.ax.clear()
-        legend = []
+        def job():
 
-        self.canvas_3d.ax.legend(legend)
-        self.canvas_3d.ax.set_facecolor("None")
+            locker = threading.Lock()
+            locker.acquire()
+            self.canvas_3d.ax.clear()
+            self.canvas_3d.perspection.clear()
+            legend = []
 
-        for name, csv in self.csv_dict.items():
-            if type(csv) != Csv_Manager:
-                continue
-            self.canvas_3d.ax.scatter(csv.cache_data['px'], csv.cache_data['py'], csv.cache_data['pz'], marker='o', s=1)
-            self.canvas_3d.perspection.plot(csv.cache_data['px'].to_numpy(), csv.cache_data['py'].to_numpy())
-        
-            legend.append(name)
+            for name, csv in self.csv_dict.copy().items():
+                if type(csv) != Csv_Manager:
+                    continue
+                self.canvas_3d.ax.scatter(csv.cache_data['px'][0::5], csv.cache_data['py'][0::5], csv.cache_data['pz'][0::5], marker='o', s=1)
+                self.canvas_3d.perspection.scatter(csv.cache_data['px'][0::5], csv.cache_data['py'][0::5], marker='o', s=1)
+            
+                legend.append(name)
 
-        self.canvas_3d.ax.set_xlabel('X(m)')
-        self.canvas_3d.ax.set_ylabel('Y(m)')
-        self.canvas_3d.ax.set_zlabel('Z(m)')
-        self.canvas_3d.ax.legend(legend)
+            self.canvas_3d.ax.legend(legend)
+            self.canvas_3d.ax.set_facecolor("None")
+            self.canvas_3d.ax.set_xlabel('X(m)')
+            self.canvas_3d.ax.set_ylabel('Y(m)')
+            self.canvas_3d.ax.set_zlabel('Z(m)')
+            self.canvas_3d.ax.legend(legend)
 
-        self.canvas_3d.perspection.clear()
-        self.canvas_3d.perspection.grid(True)
-        self.canvas_3d.perspection.set_xlabel('X(m)')
-        self.canvas_3d.perspection.set_ylabel('Y(m)')
-         
-        #self.canvas_3d.figure.tight_layout()
-        self.canvas_3d.draw()
+            
+            self.canvas_3d.perspection.grid(True)
+            self.canvas_3d.perspection.set_xlabel('X(m)')
+            self.canvas_3d.perspection.set_ylabel('Y(m)')
+            
+            #self.canvas_3d.figure.tight_layout()
+            self.canvas_3d.draw()
+            locker.release()
+ 
+        worker = threading.Thread(target=job)
+        worker.run()
     
     def rotated_figure(self, num):
 
@@ -461,11 +515,11 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
 
     def save_alignment(self):
 
-        self.vio_presave = self.vio_presave_cache[self.vio_presave_cache['timestamp'].between(self.start_from_index,self.end_to_index, inclusive="both")]
-        self.gt_presave = self.gt_presave_cache[self.gt_presave_cache['timestamp'].between(self.vio_presave['timestamp'].min(),self.vio_presave['timestamp'].max(), inclusive="both")]
+        for name, csv in self.csv_dict.items():
+            if type(csv) != Csv_Manager:
+                continue
 
-        self.vio_presave.to_csv('timed_vio_crop.csv',index=False, header=None, float_format='%.9f')
-        self.gt_presave.to_csv('timed_gt_crop.csv'  ,index=False, header=None, float_format='%.9f')
+            csv.save_modify_csv(self.start_from_index, self.end_to_index)
 
         
 if __name__ == "__main__":
