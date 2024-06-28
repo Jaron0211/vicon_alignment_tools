@@ -7,34 +7,11 @@ This file cropping the vio_path and vicon_gt file into same size, and labeling t
 
 '''
 
-####---------parameters----------####
-
-# file name
-vio_file = './csv/dgvins_vio.csv'
-gt_file  = './csv/data.csv'
-
-#variable
-best_offset = 0
-best_error_sum = 9999999
-
-####----------------------------------####
-
 import pandas as pd
 import numpy as np
 
 
 #Make plot quicker
-import matplotlib as mpl
-import matplotlib.style as mplstyle
-
-mplstyle.use(['fast'])
-mpl.rcParams['path.simplify'] = True
-mpl.rcParams['path.simplify_threshold'] = 1.0
-mpl.rcParams['agg.path.chunksize'] = 1
-
-from matplotlib.animation import FuncAnimation
-
-from PyQt5 import QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -55,9 +32,8 @@ from main_ui import Ui_VIO_alignment_Tool
 from scipy.spatial.transform import Rotation as R
 from mpl_toolkits.mplot3d import axes3d
 
-import multiprocessing, threading
+import threading
 
-####--------------UI-----------------####
 
 ####--------------UI-----------------####
 
@@ -527,4 +503,4 @@ if __name__ == "__main__":
     MainWindow = QtWidgets.QMainWindow()
     window = Main()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
