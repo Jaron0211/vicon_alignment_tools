@@ -413,7 +413,7 @@ class Main(QtWidgets.QMainWindow, Ui_VIO_alignment_Tool):
                 if type(csv) != Csv_Manager:
                     continue 
 
-                self.canvas.ax.plot(csv.cache_data['timestamp'][0::5], csv.cache_data['px'][0::5])
+                self.canvas.ax.plot(csv.cache_data['timestamp'].to_numpy()[0::5], csv.cache_data['px'].to_numpy()[0::5])
                 legend.append(name)
 
             self.canvas.ax.legend(legend)
