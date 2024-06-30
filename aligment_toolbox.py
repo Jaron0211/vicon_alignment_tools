@@ -25,27 +25,124 @@ def MakeInterpolationData(source:pd.DataFrame, target:pd.DataFrame) -> pd.DataFr
 
     return CacheDataframe[CacheDataframe['timestamp'].isin(TargetTimestamp)]
 
-def CalculateCenterPoint(target:pd.DataFrame) -> list:
+def RecoverRotation(vec1: np.ndarray , vec2: np.ndarray):
+    from scipy.spatial.transform import Rotation as R
+    axis = np.cross(vec1, vec2)
 
-    MeanPoints = [target['px'].mean(), target['py'].mean(), target['pz'].mean()]
-    return MeanPoints
+    # Compute the angle of rotation
+    angle = np.arccos(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
+
+    # Normalize the axis
+    axis = axis / np.linalg.norm(axis)
+
+    # Create the rotation object using axis-angle representation
+    rotation = R.from_rotvec(angle * axis)
+
+    # Convert the rotation to a rotation matrix
+    rotation_matrix = rotation.as_matrix()
+
+    # Extract the Euler angles from the rotation matrix
+    # Note: We assume a 'ZYX' rotation order (yaw, pitch, roll)
+
+    euler_angles = rotation.as_euler('zyx', degrees=True)
+
+    return rotation_matrix, euler_angles
 
 def GetRotFromTwoPC(source: pd.DataFrame, target: pd.DataFrame) :
     # remove outliers
     from scipy import stats
+    from scipy.spatial.transform import Rotation as R
+    from scipy.spatial.distance import cdist
+    import random
 
-    plt.figure()
     TargetCache = target.copy()
+    SourceCache = source.copy()
 
-    plt.scatter(TargetCache['px'], TargetCache['py'], s=.1, c='b')
+    TargetCache[['px','py','pz']] -= TargetCache[['px','py','pz']].mean()
+    SourceCache[['px','py','pz']] -= SourceCache[['px','py','pz']].mean()
 
-    TargetCacheOutliers = TargetCache[ abs(TargetCache['px'].diff() - TargetCache['px'].diff().mean()) > TargetCache['px'].diff().std()]
+    #TargetCache[['px','py','pz']] -= TargetCache[['px','py','pz']].loc[1]
+    #SourceCache[['px','py','pz']] -= SourceCache[['px','py','pz']].loc[1]
 
-    plt.scatter(TargetCacheOutliers['px'], TargetCacheOutliers['py'], s=.2, c='r')
+    # ax.scatter(TargetCache['px'], TargetCache['py'], s=.1, c='b')
+    # ax.scatter(SourceCache['px'], SourceCache['py'], s=.1, c='r')
+
+    def _closest_point(point, points):
+        """ Find closest point from a list of points. """
+        return points[cdist([point], points).argmin()]
+
+    def _match_value(df, col1, x, col2):
+        """ Match value x from col1 row to value in col2. """
+        return df[df[col1] == x][col2].values[0]
+
+    global MeanEular, previousEular, cosdiff, itercounter, momentum
+
+    itercounter = 0
+    cosdiff = 1
+    MeanEular = np.array([0,0,0])
+    momentum = np.array([0,0,0])
+    previousEular = MeanEular
+    fig = plt.figure(figsize=(10,10))
+    ax = fig.add_subplot(111,projection='3d')
+
+    def __animation(i):
+
+        global MeanEular, previousEular, cosdiff, itercounter, momentum
+
+        SampleNum = 100
+        
+        ax.clear()
+        ax.set_xlim3d(-2,2)
+        ax.set_ylim3d(-2,2)
+        ax.set_zlim3d(-2,2)
+        rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
+
+        rotation_xyz = R.from_euler('ZYX', MeanEular, degrees=True)
+        rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
+
+        TargetCache[['px','py','pz']] = rotated_coordinates_xyz
+
+        SourceCachePoint = pd.DataFrame()
+        TargetCachePoint = pd.DataFrame()
+
+        SourceCachePoint['point'] = [(x,y,z) for  x,y,z in zip(SourceCache['px'], SourceCache['py'], SourceCache['pz'])]
+        TargetCachePoint['point'] = [(x,y,z) for  x,y,z in zip(TargetCache['px'][::int(TargetCache.shape[0]/SampleNum)], 
+                                                               TargetCache['py'][::int(TargetCache.shape[0]/SampleNum)], 
+                                                               TargetCache['pz'][::int(TargetCache.shape[0]/SampleNum)])]
+
+        TargetCachePoint['closest'] = [_closest_point(x, list(SourceCachePoint['point'])) for x in TargetCachePoint['point']]
+
+        ax.scatter3D(SourceCache['px'], SourceCache['py'], SourceCache['pz'], s=.1, c='r')
+        ax.scatter3D(TargetCache['px'], TargetCache['py'], TargetCache['pz'], s=.1, c='b')
+
+        Euler_list = []
+        Distance_list = []
+
+        for row in TargetCachePoint.iloc:
+            ax.plot3D((row['point'][0], row['closest'][0]), (row['point'][1], row['closest'][1]), (row['point'][2], row['closest'][2]))
+            RotM, Euler = RecoverRotation(np.array(row['point']), np.array(row['closest']))
+            Distance = (row['point'][0] - row['closest'][0]), (row['point'][1] - row['closest'][1]), (row['point'][2] - row['closest'][2])
+            Euler_list.append(Euler)
+            Distance_list.append(Distance)
+        
+        weight = (Distance_list/np.sum(Distance_list))
+        MeanEular = (np.mean((np.array(Euler_list)),axis=0))
+        
+        cosdiff = np.linalg.norm(MeanEular) / np.linalg.norm(previousEular)
+
+        previousEular = MeanEular
+
+        if cosdiff > 0.99:
+            itercounter += 1
+        else:
+            itercounter = 0
+
+    worker = ani.FuncAnimation(fig, __animation, interval = 10, frames=range(0,60))
+    writergif = ani.PillowWriter(fps=15) 
+    #plt.show()
+    worker.save('ani.gif',writer=writergif)
     
-    #plt.scatter(TargetCache['timestamp'], TargetCache['px'].diff())
-
-    plt.show()
+   
 
         
 def PlotDistribution(source: pd.DataFrame):
@@ -145,42 +242,10 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
 
 
 if __name__ == '__main__':
-    #source = pd.read_csv('Aligned_dynamic_gt_1.csvedit.csv.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    # source = pd.read_csv('Aligned_dynamic_gt_1.csvedit.csv.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
     source = pd.read_csv('csv/gt/dynamic_gt_4.csvedit.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
-    target = pd.read_csv('csv/vins-fusion/vins_dynamic_4.bag_vio.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    target = pd.read_csv('csv/dgvins/dgvins_dynamic_4.bag_vio.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
 
-    # df = MakeInterpolationData(source, target)
-    # print(df)
-
-    # plt.figure()
-    # plt.scatter(source['timestamp'].values, source['py'].values,s=1, c='r')
-    # plt.scatter(df['timestamp'].values, df['py'].values,s=2, c='g')
-    # plt.scatter(target['timestamp'].values, target['py'].values,s=1, c='b')
-    # [plt.axvline(x=x,linewidth=.1) for x in target['timestamp'].values]
-    
-
-    # plt.figure()
-
-    SourceMeanPoint = CalculateCenterPoint(source)
-    TargetMeanPoint = CalculateCenterPoint(target)
-    # plt.scatter(source['px'].values, source['py'].values, s=1, c='r')
-    # plt.scatter(SourceMeanPoint[0],SourceMeanPoint[1], s=5, c='g')
-
-    # plt.scatter(target['px'].values, target['py'].values, s=1, c='b')
-    # plt.scatter(TargetMeanPoint[0],TargetMeanPoint[1], s=5, c='y')
-
-    TError = [ TargetMeanPoint[0] - SourceMeanPoint[0], TargetMeanPoint[1] - SourceMeanPoint[1], TargetMeanPoint[2] - SourceMeanPoint[2]]
-    TargetMoved = target.copy()
-    TargetMoved['px'] -= TError[0]
-    TargetMoved['py'] -= TError[1]
-    TargetMoved['pz'] -= TError[2]
-    # plt.scatter(TargetMoved['px'].values, TargetMoved['py'].values, s=1, c='c')
-
-    # plt.show()
-
-    #GetRotFromTwoPC(source, TargetMoved)
-
-    #XMean, YMean, ZMean = PlotDistribution(source)
 
     #AlignmentPath(source, target)
 
