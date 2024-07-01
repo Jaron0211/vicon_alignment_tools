@@ -71,10 +71,6 @@ def GetRotFromTwoPC(source: pd.DataFrame, target: pd.DataFrame) :
         """ Find closest point from a list of points. """
         return points[cdist([point], points).argmin()]
 
-    def _match_value(df, col1, x, col2):
-        """ Match value x from col1 row to value in col2. """
-        return df[df[col1] == x][col2].values[0]
-
     global MeanEular, previousEular, cosdiff, itercounter, momentum
 
     itercounter = 0
@@ -89,7 +85,7 @@ def GetRotFromTwoPC(source: pd.DataFrame, target: pd.DataFrame) :
 
         global MeanEular, previousEular, cosdiff, itercounter, momentum
 
-        SampleNum = 100
+        SampleNum = 30
         
         ax.clear()
         ax.set_xlim3d(-2,2)
@@ -111,6 +107,7 @@ def GetRotFromTwoPC(source: pd.DataFrame, target: pd.DataFrame) :
                                                                TargetCache['pz'][::int(TargetCache.shape[0]/SampleNum)])]
 
         TargetCachePoint['closest'] = [_closest_point(x, list(SourceCachePoint['point'])) for x in TargetCachePoint['point']]
+        #TargetCachePoint['farest'] = [_farest_point(x, list(SourceCachePoint['point'])) for x in TargetCachePoint['point']]
 
         ax.scatter3D(SourceCache['px'], SourceCache['py'], SourceCache['pz'], s=.1, c='r')
         ax.scatter3D(TargetCache['px'], TargetCache['py'], TargetCache['pz'], s=.1, c='b')
@@ -119,16 +116,20 @@ def GetRotFromTwoPC(source: pd.DataFrame, target: pd.DataFrame) :
         Distance_list = []
 
         for row in TargetCachePoint.iloc:
-            ax.plot3D((row['point'][0], row['closest'][0]), (row['point'][1], row['closest'][1]), (row['point'][2], row['closest'][2]))
+            ax.plot3D((row['point'][0], row['closest'][0]), (row['point'][1], row['closest'][1]), (row['point'][2], row['closest'][2]), c='r')
+            #ax.plot3D((row['point'][0], row['farest'][0]), (row['point'][1], row['farest'][1]), (row['point'][2], row['farest'][2]), c='b')
+            
             RotM, Euler = RecoverRotation(np.array(row['point']), np.array(row['closest']))
             Distance = (row['point'][0] - row['closest'][0]), (row['point'][1] - row['closest'][1]), (row['point'][2] - row['closest'][2])
             Euler_list.append(Euler)
+            # RotM, Euler = RecoverRotation(np.array(row['point']), np.array(row['farest']))
+            # Euler_list.append(Euler)
             Distance_list.append(Distance)
         
         weight = (Distance_list/np.sum(Distance_list))
         MeanEular = (np.mean((np.array(Euler_list)),axis=0))
         
-        cosdiff = np.linalg.norm(MeanEular) / np.linalg.norm(previousEular)
+        cosdiff = np.linalg.norm(MeanEular-previousEular)
 
         previousEular = MeanEular
 
@@ -140,8 +141,120 @@ def GetRotFromTwoPC(source: pd.DataFrame, target: pd.DataFrame) :
     worker = ani.FuncAnimation(fig, __animation, interval = 10, frames=range(0,60))
     writergif = ani.PillowWriter(fps=15) 
     #plt.show()
-    worker.save('ani.gif',writer=writergif)
+    worker.save('RT_force.gif',writer=writergif)
+
+def GeometryDescriptor(source: pd.DataFrame):
+
+    from scipy.spatial.transform import Rotation as R
+
+    SourceCache = source.copy()
+
+    MeanPoint = SourceCache[['px','py','pz']].mean().to_numpy()
+
+    RotM, Eular = RecoverRotation(np.array(MeanPoint - MedianPoint), np.array(MeanPoint - MeanPoint))
+
+    SourceCache[['px','py','pz']] = rotated_coordinates_xyz
+
+    Eular_list = []
+    for row in SourceCache.iloc:
+
+        RotM, Eular = RecoverRotation(np.array(row[['px','py','pz']]), np.array(MeanPoint))
+        Eular = tuple(Eular.tolist())
+
+        Eular = tuple(row[['px','py','pz']].to_list())
+        Eular_list.append(Eular)
+
+    RotOfPath = np.array(Eular_list).mean()
+    rotation_xyz = R.from_euler('zyx', RotOfPath)
+
+    rotated_coordinates_xyz = np.column_stack((SourceCache['px'], SourceCache['py'], SourceCache['pz']))
+    rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
     
+    SourceCache['descriptor'] = Eular_list
+    SourceCache[['px','py','pz']] = source[['px','py','pz']]
+
+    return SourceCache
+
+def ICP(source: pd.DataFrame, target: pd.DataFrame) :
+
+    from scipy import stats
+    from scipy.spatial.transform import Rotation as R
+    from scipy.spatial.distance import cdist
+    import random
+
+    TargetCache = target.copy()
+    SourceCache = source.copy()
+
+    def _closest_point(point, points):
+        """ Find closest point from a list of points. """
+        return points[cdist([point], points).argmin()]
+
+    global Rot_pre
+
+    Rot_pre = np.array([[0,0,0],[0,0,0],[0,0,0]])
+
+    fig = plt.figure(figsize=(10,10))
+    ax = fig.add_subplot(111,projection='3d')
+
+    def __animation(i):
+
+        global Rot_pre
+
+        SampleNum = 100
+        
+        ax.clear()
+        ax.set_xlim3d(-2,2)
+        ax.set_ylim3d(-2,2)
+        ax.set_zlim3d(-2,2)
+        ax.view_init(elev=20., azim=180)
+
+        SourceCachePoint = pd.DataFrame()
+        TargetCachePoint = pd.DataFrame()
+
+        TargetCacheCentroid = np.asarray(TargetCache[['px','py','pz']].mean())
+        SourceCacheCentroid = np.asarray(SourceCache[['px','py','pz']].mean())
+
+        SourceCachePoint['point'] = [[x,y,z] for  x,y,z in zip(SourceCache['px'], SourceCache['py'], SourceCache['pz'])]
+        TargetCachePoint['point'] = [[x,y,z] for  x,y,z in zip(TargetCache['px'][::int(TargetCache.shape[0]/SampleNum)], 
+                                                               TargetCache['py'][::int(TargetCache.shape[0]/SampleNum)], 
+                                                               TargetCache['pz'][::int(TargetCache.shape[0]/SampleNum)])]
+        
+        TargetCachePoint['closest'] = [_closest_point(x, list(SourceCachePoint['point'])) for x in TargetCachePoint['point']]
+        #TargetCachePoint['closest'].loc[TargetCachePoint['closest'].shape[0]-1] = SourceCachePoint['point'].loc[SourceCachePoint['point'].shape[0]-1]
+
+        TargetCachePoint = TargetCachePoint.loc[int(TargetCachePoint.shape[0]*0.2):]
+
+        for row in TargetCachePoint.iloc:
+            ax.plot3D((row['point'][0], row['closest'][0]), (row['point'][1], row['closest'][1]), (row['point'][2], row['closest'][2]))
+
+        ax.scatter3D(SourceCache['px'], SourceCache['py'], SourceCache['pz'], s=.1, c='r')
+        ax.scatter3D(TargetCache['px'], TargetCache['py'], TargetCache['pz'], s=.1, c='b')
+
+        SourcePointMatrix = np.asarray([list(point) for point in TargetCachePoint['closest'].to_list()])
+        TargetPointMatrix = np.asarray([list(point) for point in TargetCachePoint['point'].to_list()])
+
+        CovMatrix = TargetPointMatrix.transpose() @ SourcePointMatrix
+
+        #SVD
+        U, X, Vt = np.linalg.svd(CovMatrix)
+        Rot = U @ Vt
+        
+        Trans = TargetCacheCentroid - Rot @ SourceCacheCentroid
+        Trans = np.reshape(Trans, (1,3))
+
+        rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
+
+        rotation_xyz = R.from_matrix(Rot.T)
+        rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
+
+        TargetCache[['px','py','pz']] = rotated_coordinates_xyz - Trans
+        TargetCache[['px','py','pz']] += SourceCache[['px','py','pz']].loc[0] - TargetCache[['px','py','pz']].loc[0]
+        Rot_pre = Rot
+
+    worker = ani.FuncAnimation(fig, __animation, interval = 1, frames=range(0,100))
+    writergif = ani.PillowWriter(fps=10) 
+    #plt.show()
+    worker.save('icp.gif',writer=writergif)
    
 
         
@@ -240,14 +353,15 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
     plt.show()
     
 
-
 if __name__ == '__main__':
     # source = pd.read_csv('Aligned_dynamic_gt_1.csvedit.csv.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
-    source = pd.read_csv('csv/gt/dynamic_gt_4.csvedit.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
-    target = pd.read_csv('csv/dgvins/dgvins_dynamic_4.bag_vio.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    source = pd.read_csv('csv/gt/dynamic_gt_3.csvedit.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    target = pd.read_csv('csv/dgvins/dgvins_dynamic_3.bag_vio.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
 
 
     #AlignmentPath(source, target)
 
-    GetRotFromTwoPC(source, target)
+    #GetRotFromTwoPC(source, target)
+    ICP(source, target)
+    #GeometryDescriptor(source)
     
