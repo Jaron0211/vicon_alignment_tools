@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>989</width>
+    <width>1026</width>
     <height>867</height>
    </rect>
   </property>
@@ -45,12 +45,22 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
-    <item row="11" column="3">
-     <widget class="QLabel" name="path_color_r_label">
-      <property name="text">
-       <string>R</string>
+    <item row="0" column="0" rowspan="15" colspan="2">
+     <layout class="QGridLayout" name="canvas_3d_layout">
+      <property name="sizeConstraint">
+       <enum>QLayout::SetMaximumSize</enum>
       </property>
-     </widget>
+      <item row="0" column="0">
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="PlotWidget" name="prespect_plot" native="true"/>
+        </item>
+        <item>
+         <widget class="GLViewWidget" name="three_d_plot" native="true"/>
+        </item>
+       </layout>
+      </item>
+     </layout>
     </item>
     <item row="23" column="4">
      <widget class="QDoubleSpinBox" name="xscale_spinbox">
@@ -68,6 +78,159 @@
       </property>
      </widget>
     </item>
+    <item row="1" column="3" colspan="2">
+     <widget class="QListWidget" name="listWidget_CsvList"/>
+    </item>
+    <item row="27" column="3">
+     <widget class="QSpinBox" name="vio_shift_spinbox">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="value">
+       <number>0</number>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="3">
+     <widget class="QLabel" name="start_time_label">
+      <property name="text">
+       <string>Start Time</string>
+      </property>
+     </widget>
+    </item>
+    <item row="13" column="4">
+     <widget class="QDoubleSpinBox" name="path_color_b_spinbox">
+      <property name="maximum">
+       <double>1.000000000000000</double>
+      </property>
+      <property name="singleStep">
+       <double>0.010000000000000</double>
+      </property>
+     </widget>
+    </item>
+    <item row="26" column="4">
+     <widget class="QLabel" name="shift_gt_label">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>Shift GT data</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item row="27" column="4">
+     <widget class="QSpinBox" name="gt_shift_spinbox">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="maximum">
+       <number>10000</number>
+      </property>
+     </widget>
+    </item>
+    <item row="31" column="1">
+     <widget class="QSlider" name="End_to">
+      <property name="maximum">
+       <number>100</number>
+      </property>
+      <property name="pageStep">
+       <number>1</number>
+      </property>
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="invertedAppearance">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="3">
+     <widget class="QPushButton" name="GT_file">
+      <property name="text">
+       <string>Open GT file</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="3" colspan="2">
+     <widget class="Line" name="line_5">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="3" colspan="2">
+     <widget class="QLabel" name="path_color_label">
+      <property name="text">
+       <string>Path Color</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="3">
+     <widget class="QLabel" name="end_time_label">
+      <property name="text">
+       <string>End Time</string>
+      </property>
+     </widget>
+    </item>
+    <item row="30" column="1">
+     <widget class="QSlider" name="Start_from">
+      <property name="maximum">
+       <number>100</number>
+      </property>
+      <property name="pageStep">
+       <number>1</number>
+      </property>
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="30" column="0">
+     <widget class="QLabel" name="start_from_label">
+      <property name="text">
+       <string>Start From</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="3" colspan="2">
+     <widget class="QLabel" name="path_list_label">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>Path List</string>
+      </property>
+     </widget>
+    </item>
+    <item row="12" column="3">
+     <widget class="QLabel" name="path_color_g_label">
+      <property name="text">
+       <string>G</string>
+      </property>
+     </widget>
+    </item>
+    <item row="29" column="3" colspan="2">
+     <widget class="Line" name="line_2">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
     <item row="30" column="3" rowspan="2" colspan="2">
      <widget class="QPushButton" name="save_result">
       <property name="sizePolicy">
@@ -78,6 +241,79 @@
       </property>
       <property name="text">
        <string>Save Result</string>
+      </property>
+     </widget>
+    </item>
+    <item row="14" column="3" colspan="2">
+     <widget class="Line" name="line_3">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="4">
+     <widget class="QPushButton" name="VIO_file">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>Open VIO path</string>
+      </property>
+     </widget>
+    </item>
+    <item row="24" column="3">
+     <widget class="QLabel" name="show_range_label">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>Show range(%)</string>
+      </property>
+     </widget>
+    </item>
+    <item row="22" column="4">
+     <widget class="QDoubleSpinBox" name="yscale_spinbox">
+      <property name="decimals">
+       <number>4</number>
+      </property>
+      <property name="minimum">
+       <double>0.000000000000000</double>
+      </property>
+      <property name="maximum">
+       <double>100.000000000000000</double>
+      </property>
+      <property name="singleStep">
+       <double>0.100000000000000</double>
+      </property>
+      <property name="value">
+       <double>1.000000000000000</double>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="4">
+     <widget class="QSpinBox" name="start_time_spinbox">
+      <property name="maximum">
+       <number>999999999</number>
+      </property>
+     </widget>
+    </item>
+    <item row="8" column="3" colspan="2">
+     <widget class="Line" name="line_4">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="31" column="0">
+     <widget class="QLabel" name="end_to_label">
+      <property name="text">
+       <string>End To</string>
       </property>
      </widget>
     </item>
@@ -94,10 +330,104 @@
       </property>
      </widget>
     </item>
-    <item row="2" column="3">
-     <widget class="QPushButton" name="GT_file">
+    <item row="24" column="4">
+     <widget class="QSpinBox" name="range_spinbox">
+      <property name="maximum">
+       <number>10000</number>
+      </property>
+      <property name="value">
+       <number>1</number>
+      </property>
+     </widget>
+    </item>
+    <item row="25" column="3" colspan="2">
+     <widget class="Line" name="line">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="3">
+     <widget class="QLabel" name="path_time_label">
       <property name="text">
-       <string>Open GT file</string>
+       <string>Path Time</string>
+      </property>
+     </widget>
+    </item>
+    <item row="26" column="3">
+     <widget class="QLabel" name="shift_vio_label">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>Shift VIO data</string>
+      </property>
+     </widget>
+    </item>
+    <item row="28" column="4">
+     <widget class="QDial" name="dial_gt_shift">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="wrapping">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="11" column="4">
+     <widget class="QDoubleSpinBox" name="path_color_r_spinbox">
+      <property name="maximum">
+       <double>1.000000000000000</double>
+      </property>
+      <property name="singleStep">
+       <double>0.010000000000000</double>
+      </property>
+     </widget>
+    </item>
+    <item row="13" column="3">
+     <widget class="QLabel" name="path_color_b_label">
+      <property name="text">
+       <string>B</string>
+      </property>
+     </widget>
+    </item>
+    <item row="28" column="3">
+     <widget class="QDial" name="dial_vio_shift">
+      <property name="wrapping">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="12" column="4">
+     <widget class="QDoubleSpinBox" name="path_color_g_spinbox">
+      <property name="maximum">
+       <double>1.000000000000000</double>
+      </property>
+      <property name="singleStep">
+       <double>0.010000000000000</double>
+      </property>
+     </widget>
+    </item>
+    <item row="23" column="3">
+     <widget class="QLabel" name="x_scale_label">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text">
+       <string>X scale</string>
+      </property>
+     </widget>
+    </item>
+    <item row="11" column="3">
+     <widget class="QLabel" name="path_color_r_label">
+      <property name="text">
+       <string>R</string>
       </property>
      </widget>
     </item>
@@ -250,90 +580,6 @@
       </item>
      </layout>
     </item>
-    <item row="23" column="3">
-     <widget class="QLabel" name="x_scale_label">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>X scale</string>
-      </property>
-     </widget>
-    </item>
-    <item row="13" column="3">
-     <widget class="QLabel" name="path_color_b_label">
-      <property name="text">
-       <string>B</string>
-      </property>
-     </widget>
-    </item>
-    <item row="18" column="4" rowspan="2">
-     <widget class="QPushButton" name="auto_align_button">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Auto Align</string>
-      </property>
-     </widget>
-    </item>
-    <item row="4" column="3">
-     <widget class="QLabel" name="path_time_label">
-      <property name="text">
-       <string>Path Time</string>
-      </property>
-     </widget>
-    </item>
-    <item row="25" column="3" colspan="2">
-     <widget class="Line" name="line">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-     </widget>
-    </item>
-    <item row="21" column="0" rowspan="8" colspan="2">
-     <layout class="QVBoxLayout" name="canvas_layout">
-      <item>
-       <widget class="PlotWidget" name="two_d_plot" native="true"/>
-      </item>
-     </layout>
-    </item>
-    <item row="2" column="4">
-     <widget class="QPushButton" name="VIO_file">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Open VIO path</string>
-      </property>
-     </widget>
-    </item>
-    <item row="11" column="4">
-     <widget class="QDoubleSpinBox" name="path_color_r_spinbox">
-      <property name="maximum">
-       <double>1.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.010000000000000</double>
-      </property>
-     </widget>
-    </item>
-    <item row="6" column="4">
-     <widget class="QSpinBox" name="start_time_spinbox">
-      <property name="maximum">
-       <number>999999999</number>
-      </property>
-     </widget>
-    </item>
     <item row="22" column="3">
      <widget class="QLabel" name="y_scale_label">
       <property name="sizePolicy">
@@ -347,295 +593,23 @@
       </property>
      </widget>
     </item>
-    <item row="13" column="4">
-     <widget class="QDoubleSpinBox" name="path_color_b_spinbox">
-      <property name="maximum">
-       <double>1.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.010000000000000</double>
-      </property>
-     </widget>
-    </item>
-    <item row="30" column="0">
-     <widget class="QLabel" name="start_from_label">
-      <property name="text">
-       <string>Start From</string>
-      </property>
-     </widget>
-    </item>
-    <item row="28" column="4">
-     <widget class="QDial" name="dial_gt_shift">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-      <property name="wrapping">
-       <bool>true</bool>
-      </property>
-     </widget>
-    </item>
-    <item row="7" column="3">
-     <widget class="QLabel" name="end_time_label">
-      <property name="text">
-       <string>End Time</string>
-      </property>
-     </widget>
-    </item>
-    <item row="1" column="3" colspan="2">
-     <widget class="QListWidget" name="listWidget_CsvList"/>
-    </item>
-    <item row="26" column="4">
-     <widget class="QLabel" name="shift_gt_label">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Shift GT data</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
-    </item>
-    <item row="27" column="3">
-     <widget class="QSpinBox" name="vio_shift_spinbox">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="value">
-       <number>0</number>
-      </property>
-     </widget>
-    </item>
-    <item row="9" column="3" colspan="2">
-     <widget class="QLabel" name="path_color_label">
-      <property name="text">
-       <string>Path Color</string>
-      </property>
-     </widget>
-    </item>
-    <item row="6" column="3">
-     <widget class="QLabel" name="start_time_label">
-      <property name="text">
-       <string>Start Time</string>
-      </property>
-     </widget>
-    </item>
-    <item row="19" column="3">
-     <widget class="QPushButton" name="auto_trans_button">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Auto Trans</string>
-      </property>
-     </widget>
-    </item>
-    <item row="24" column="4">
-     <widget class="QSpinBox" name="range_spinbox">
-      <property name="maximum">
-       <number>10000</number>
-      </property>
-      <property name="value">
-       <number>1</number>
-      </property>
-     </widget>
-    </item>
-    <item row="3" column="3" colspan="2">
-     <widget class="Line" name="line_5">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-     </widget>
-    </item>
-    <item row="28" column="3">
-     <widget class="QDial" name="dial_vio_shift">
-      <property name="wrapping">
-       <bool>true</bool>
-      </property>
-     </widget>
-    </item>
-    <item row="14" column="3" colspan="2">
-     <widget class="Line" name="line_3">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-     </widget>
-    </item>
-    <item row="12" column="3">
-     <widget class="QLabel" name="path_color_g_label">
-      <property name="text">
-       <string>G</string>
-      </property>
-     </widget>
-    </item>
-    <item row="30" column="1">
-     <widget class="QSlider" name="Start_from">
-      <property name="maximum">
-       <number>100</number>
-      </property>
-      <property name="pageStep">
-       <number>1</number>
-      </property>
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-     </widget>
-    </item>
-    <item row="18" column="3">
-     <widget class="QPushButton" name="auto_rot_button">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Auto Rot</string>
-      </property>
-     </widget>
-    </item>
-    <item row="26" column="3">
-     <widget class="QLabel" name="shift_vio_label">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Shift VIO data</string>
-      </property>
-     </widget>
-    </item>
-    <item row="22" column="4">
-     <widget class="QDoubleSpinBox" name="yscale_spinbox">
-      <property name="decimals">
-       <number>4</number>
-      </property>
-      <property name="minimum">
-       <double>0.000000000000000</double>
-      </property>
-      <property name="maximum">
-       <double>100.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.100000000000000</double>
-      </property>
-      <property name="value">
-       <double>1.000000000000000</double>
-      </property>
-     </widget>
-    </item>
-    <item row="12" column="4">
-     <widget class="QDoubleSpinBox" name="path_color_g_spinbox">
-      <property name="maximum">
-       <double>1.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.010000000000000</double>
-      </property>
-     </widget>
-    </item>
-    <item row="0" column="0" rowspan="15" colspan="2">
-     <layout class="QGridLayout" name="canvas_3d_layout">
-      <property name="sizeConstraint">
-       <enum>QLayout::SetMaximumSize</enum>
-      </property>
-      <item row="0" column="0">
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <item>
-         <widget class="PlotWidget" name="prespect_plot" native="true"/>
-        </item>
-        <item>
-         <widget class="GLViewWidget" name="three_d_plot" native="true"/>
-        </item>
-       </layout>
+    <item row="21" column="0" rowspan="8" colspan="2">
+     <layout class="QVBoxLayout" name="canvas_layout">
+      <item>
+       <widget class="PlotWidget" name="two_d_plot" native="true"/>
       </item>
      </layout>
     </item>
-    <item row="24" column="3">
-     <widget class="QLabel" name="show_range_label">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Show range(%)</string>
-      </property>
-     </widget>
-    </item>
-    <item row="29" column="3" colspan="2">
-     <widget class="Line" name="line_2">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-     </widget>
-    </item>
-    <item row="31" column="0">
-     <widget class="QLabel" name="end_to_label">
-      <property name="text">
-       <string>End To</string>
-      </property>
-     </widget>
-    </item>
-    <item row="0" column="3" colspan="2">
-     <widget class="QLabel" name="path_list_label">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="text">
-       <string>Path List</string>
-      </property>
-     </widget>
-    </item>
-    <item row="31" column="1">
-     <widget class="QSlider" name="End_to">
-      <property name="maximum">
-       <number>100</number>
-      </property>
-      <property name="pageStep">
-       <number>1</number>
-      </property>
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-      <property name="invertedAppearance">
-       <bool>true</bool>
-      </property>
-     </widget>
-    </item>
-    <item row="27" column="4">
-     <widget class="QSpinBox" name="gt_shift_spinbox">
+    <item row="18" column="3" rowspan="2" colspan="2">
+     <widget class="QPushButton" name="auto_align_button">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
         <horstretch>0</horstretch>
         <verstretch>0</verstretch>
        </sizepolicy>
       </property>
-      <property name="maximum">
-       <number>10000</number>
-      </property>
-     </widget>
-    </item>
-    <item row="8" column="3" colspan="2">
-     <widget class="Line" name="line_4">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
+      <property name="text">
+       <string>Auto Align</string>
       </property>
      </widget>
     </item>
@@ -646,7 +620,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>989</width>
+     <width>1026</width>
      <height>21</height>
     </rect>
    </property>

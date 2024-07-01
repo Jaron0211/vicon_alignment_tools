@@ -5,6 +5,11 @@ from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.animation as ani
 
+from scipy import stats
+from scipy.spatial.transform import Rotation as R
+from scipy.spatial.distance import cdist
+import random
+
 pd.options.display.float_format = '{:.4f}'.format
 
 def MakeInterpolationData(source:pd.DataFrame, target:pd.DataFrame) -> pd.DataFrame :
@@ -20,10 +25,10 @@ def MakeInterpolationData(source:pd.DataFrame, target:pd.DataFrame) -> pd.DataFr
     CacheDataframe = pd.concat([source, CacheDataframe]).drop_duplicates(subset='timestamp')
     CacheDataframe = CacheDataframe.sort_values(by=['timestamp'],ignore_index=True)
 
-    CacheDataframe.interpolate(method='cubic',order=3, inplace=True, limit_direction='both')
+    #CacheDataframe.interpolate(method='cubic',order=3, inplace=True, limit_direction='both')
     CacheDataframe.interpolate(method='linear',order=3, inplace=True, limit_direction='both')
 
-    return CacheDataframe[CacheDataframe['timestamp'].isin(TargetTimestamp)]
+    return CacheDataframe
 
 def RecoverRotation(vec1: np.ndarray , vec2: np.ndarray):
     from scipy.spatial.transform import Rotation as R
@@ -49,6 +54,7 @@ def RecoverRotation(vec1: np.ndarray , vec2: np.ndarray):
     return rotation_matrix, euler_angles
 
 def GetRotFromTwoPC(source: pd.DataFrame, target: pd.DataFrame) :
+
     # remove outliers
     from scipy import stats
     from scipy.spatial.transform import Rotation as R
@@ -66,10 +72,6 @@ def GetRotFromTwoPC(source: pd.DataFrame, target: pd.DataFrame) :
 
     # ax.scatter(TargetCache['px'], TargetCache['py'], s=.1, c='b')
     # ax.scatter(SourceCache['px'], SourceCache['py'], s=.1, c='r')
-
-    def _closest_point(point, points):
-        """ Find closest point from a list of points. """
-        return points[cdist([point], points).argmin()]
 
     global MeanEular, previousEular, cosdiff, itercounter, momentum
 
@@ -175,87 +177,54 @@ def GeometryDescriptor(source: pd.DataFrame):
 
     return SourceCache
 
-def ICP(source: pd.DataFrame, target: pd.DataFrame) :
+def _closest_point(point, points):
+        """ Find closest point from a list of points. """
+        return points[cdist([point], points).argmin()]
 
-    from scipy import stats
-    from scipy.spatial.transform import Rotation as R
-    from scipy.spatial.distance import cdist
-    import random
+def ICP(source: pd.DataFrame, 
+        target: pd.DataFrame, 
+        SampleNum : int = 60, 
+        Rot_pre : np.array = np.array([[0,0,0],[0,0,0],[0,0,0]])) :
+    
+    Rot_pre = Rot_pre
 
     TargetCache = target.copy()
     SourceCache = source.copy()
 
-    def _closest_point(point, points):
-        """ Find closest point from a list of points. """
-        return points[cdist([point], points).argmin()]
+    SourceCachePoint = pd.DataFrame()
+    TargetCachePoint = pd.DataFrame()
 
-    global Rot_pre
+    TargetCacheCentroid = np.asarray(TargetCache[['px','py','pz']].mean())
+    SourceCacheCentroid = np.asarray(SourceCache[['px','py','pz']].mean())
 
-    Rot_pre = np.array([[0,0,0],[0,0,0],[0,0,0]])
+    SourceCachePoint['point'] = [[x,y,z] for  x,y,z in zip(SourceCache['px'], SourceCache['py'], SourceCache['pz'])]
+    TargetCachePoint['point'] = [[x,y,z] for  x,y,z in zip(TargetCache['px'][::int(TargetCache.shape[0]/SampleNum)], 
+                                                            TargetCache['py'][::int(TargetCache.shape[0]/SampleNum)], 
+                                                            TargetCache['pz'][::int(TargetCache.shape[0]/SampleNum)])]
+    
+    TargetCachePoint['closest'] = [_closest_point(x, list(SourceCachePoint['point'])) for x in TargetCachePoint['point']]
 
-    fig = plt.figure(figsize=(10,10))
-    ax = fig.add_subplot(111,projection='3d')
+    SourcePointMatrix = np.asarray([list(point) for point in TargetCachePoint['closest'].to_list()])
+    TargetPointMatrix = np.asarray([list(point) for point in TargetCachePoint['point'].to_list()])
 
-    def __animation(i):
+    CovMatrix = TargetPointMatrix.transpose() @ SourcePointMatrix
 
-        global Rot_pre
+    #SVD
+    U, X, Vt = np.linalg.svd(CovMatrix)
+    Rot = U @ Vt
+    
+    Trans = TargetCacheCentroid - Rot @ SourceCacheCentroid
+    Trans = np.reshape(Trans, (1,3))
 
-        SampleNum = 100
-        
-        ax.clear()
-        ax.set_xlim3d(-2,2)
-        ax.set_ylim3d(-2,2)
-        ax.set_zlim3d(-2,2)
-        ax.view_init(elev=20., azim=180)
+    # rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
 
-        SourceCachePoint = pd.DataFrame()
-        TargetCachePoint = pd.DataFrame()
+    # rotation_xyz = R.from_matrix(Rot.T)
+    # rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
 
-        TargetCacheCentroid = np.asarray(TargetCache[['px','py','pz']].mean())
-        SourceCacheCentroid = np.asarray(SourceCache[['px','py','pz']].mean())
+    # TargetCache[['px','py','pz']] = rotated_coordinates_xyz - Trans
+    # TargetCache[['px','py','pz']] += SourceCache[['px','py','pz']].loc[0] - TargetCache[['px','py','pz']].loc[0]
 
-        SourceCachePoint['point'] = [[x,y,z] for  x,y,z in zip(SourceCache['px'], SourceCache['py'], SourceCache['pz'])]
-        TargetCachePoint['point'] = [[x,y,z] for  x,y,z in zip(TargetCache['px'][::int(TargetCache.shape[0]/SampleNum)], 
-                                                               TargetCache['py'][::int(TargetCache.shape[0]/SampleNum)], 
-                                                               TargetCache['pz'][::int(TargetCache.shape[0]/SampleNum)])]
-        
-        TargetCachePoint['closest'] = [_closest_point(x, list(SourceCachePoint['point'])) for x in TargetCachePoint['point']]
-        #TargetCachePoint['closest'].loc[TargetCachePoint['closest'].shape[0]-1] = SourceCachePoint['point'].loc[SourceCachePoint['point'].shape[0]-1]
-
-        TargetCachePoint = TargetCachePoint.loc[int(TargetCachePoint.shape[0]*0.2):]
-
-        for row in TargetCachePoint.iloc:
-            ax.plot3D((row['point'][0], row['closest'][0]), (row['point'][1], row['closest'][1]), (row['point'][2], row['closest'][2]))
-
-        ax.scatter3D(SourceCache['px'], SourceCache['py'], SourceCache['pz'], s=.1, c='r')
-        ax.scatter3D(TargetCache['px'], TargetCache['py'], TargetCache['pz'], s=.1, c='b')
-
-        SourcePointMatrix = np.asarray([list(point) for point in TargetCachePoint['closest'].to_list()])
-        TargetPointMatrix = np.asarray([list(point) for point in TargetCachePoint['point'].to_list()])
-
-        CovMatrix = TargetPointMatrix.transpose() @ SourcePointMatrix
-
-        #SVD
-        U, X, Vt = np.linalg.svd(CovMatrix)
-        Rot = U @ Vt
-        
-        Trans = TargetCacheCentroid - Rot @ SourceCacheCentroid
-        Trans = np.reshape(Trans, (1,3))
-
-        rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
-
-        rotation_xyz = R.from_matrix(Rot.T)
-        rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
-
-        TargetCache[['px','py','pz']] = rotated_coordinates_xyz - Trans
-        TargetCache[['px','py','pz']] += SourceCache[['px','py','pz']].loc[0] - TargetCache[['px','py','pz']].loc[0]
-        Rot_pre = Rot
-
-    worker = ani.FuncAnimation(fig, __animation, interval = 1, frames=range(0,100))
-    writergif = ani.PillowWriter(fps=10) 
-    #plt.show()
-    worker.save('icp.gif',writer=writergif)
-   
+    return Rot, Trans
 
         
 def PlotDistribution(source: pd.DataFrame):
@@ -297,71 +266,95 @@ def PlotDistribution(source: pd.DataFrame):
 
     return XMean, YMean, ZMean
 
-def CreateTimeViaHz(source: pd.DataFrame, start_time, hz = 100):
+def CreateTimeViaHz(source: pd.DataFrame, end_time, hz = 100):
 
     SourceCache = source.copy()
 
-    SourceCache['timestamp'] = [ (start_time + 1/hz*i*10**9) for i in range(0, source.shape[0], 1)]
+    timestamp_array = [ (end_time - 1/hz*i*10**9) for i in range(0, source.shape[0], 1)]
+
+    SourceCache['timestamp'] = timestamp_array[::-1]
 
     return SourceCache
 
 def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
+    '''
+    Source: The GT file
+    Target: The Path file
+    '''
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
     SourceCache = source.copy()
+    TargetCache = target.copy()
 
     if (source['timestamp'].isna().any()):
         SourceCache = CreateTimeViaHz(source, target['timestamp'].loc[0])
-        print('Make Interpolation Timestamp')
 
-    ErrorDistribution = []
-
-
-    def _animate(i):
-
-        
-        SourceShift = SourceCache.copy()
-        SourceShift['timestamp'] += i*10**9/10
-        if SourceShift['timestamp'].min() > target['timestamp'].max(): return
-        SourceCacheInterpolation = MakeInterpolationData(SourceShift,target)
-
-        ax.clear()
-
-        ax.scatter(SourceCacheInterpolation['timestamp'],SourceCacheInterpolation['px'], s=.5, c='b')
-        ax.axvline(SourceShift['timestamp'][0],c='g')
-        ax.scatter(target['timestamp'],target['px'], s=.5, c='r')
-
-        Error = abs(SourceCacheInterpolation['px'].to_numpy() - target['px'].to_numpy()).sum()
-        print(Error)
-        ErrorDistribution.append(Error)
-
-        return [ax]
-
-    worker = ani.FuncAnimation(fig, _animate, frames = range(SourceCache['timestamp'].shape[0]), interval=1, repeat = False)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_title('Before Iteration')
+    ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
+    ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
     plt.show()
 
-    fig2 = plt.figure()
-    plt.plot(range(len(ErrorDistribution)), ErrorDistribution)
-    plt.scatter(ErrorDistribution.index(min(ErrorDistribution)), min(ErrorDistribution))
-    plt.text(ErrorDistribution.index(min(ErrorDistribution)), min(ErrorDistribution), str(ErrorDistribution.index(min(ErrorDistribution))))
+    BestTimeShift = 0
+    Pre_BestTimeShift = 10**100
+    PreviousError = 10**9
+
+    print('First Proximation')
+
+    _StartOfSecondIteration = 0
+    _EndOfSecondIteration = int(TargetCache['timestamp'].max() - TargetCache['timestamp'].min() + SourceCache['timestamp'].max() - SourceCache['timestamp'].min())
+    _Step = int((_EndOfSecondIteration - _StartOfSecondIteration)/20)
+
+    while 1:
+
+        for i in tqdm(range(_StartOfSecondIteration, _EndOfSecondIteration, _Step)):
+
+            SourceShift = SourceCache.copy()
+
+            SourceShift['timestamp'] += i
+
+            SourceCacheInterpolation = MakeInterpolationData(SourceShift,TargetCache)
+
+            Error = abs(SourceCacheInterpolation['px'][SourceCacheInterpolation['timestamp'].isin(target['timestamp'])].to_numpy() - target['px'].to_numpy()).sum()
+            if Error < PreviousError:
+
+                BestTimeShift = i
+                PreviousError = Error
+            
+    
+        _StartOfSecondIteration = int(BestTimeShift - _Step)
+        _EndOfSecondIteration = int(BestTimeShift + _Step)
+        _Step = int((_EndOfSecondIteration - _StartOfSecondIteration)/20)
+
+        print(1 - abs( BestTimeShift / Pre_BestTimeShift))
+        if 1 - abs( BestTimeShift / Pre_BestTimeShift) == 0:
+            print('Best time shift: ', BestTimeShift)
+            break
+
+        Pre_BestTimeShift = BestTimeShift
+    
+    SourceCache['timestamp'] += BestTimeShift
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_title('After Iteration')
+    ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
+    ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
     plt.show()
 
-    fig3 = plt.figure()
-    plt.scatter(SourceCache['timestamp']+ErrorDistribution.index(min(ErrorDistribution))*10**9/10 ,SourceCache['px'], s=.5, c='b')
-    plt.scatter(target['timestamp'],target['px'], s=.5, c='r')
-    plt.show()
+    return SourceCache, TargetCache
     
 
 if __name__ == '__main__':
-    # source = pd.read_csv('Aligned_dynamic_gt_1.csvedit.csv.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
-    source = pd.read_csv('csv/gt/dynamic_gt_3.csvedit.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
-    target = pd.read_csv('csv/dgvins/dgvins_dynamic_3.bag_vio.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    source = pd.read_csv('Aligned_dynamic_gt_1.csvedit.csv.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    target = pd.read_csv('Aligned_dynaVINS_50_dynamic_1.bag_vio.csv.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    
+    source['timestamp'] = np.nan
+    #source = pd.read_csv('csv/gt/dynamic_gt_3.csvedit.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    #target = pd.read_csv('csv/dgvins/dgvins_dynamic_3.bag_vio.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
 
-
-    #AlignmentPath(source, target)
+    source, target = AlignmentPath(source, target)
 
     #GetRotFromTwoPC(source, target)
-    ICP(source, target)
+    # ICP(source, target)
     #GeometryDescriptor(source)
     

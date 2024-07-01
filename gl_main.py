@@ -50,6 +50,10 @@ class Csv_Manager():
         self.y_rotate = 0
         self.x_rotate = 0
 
+        self.z_transition = 0
+        self.y_transition = 0
+        self.x_transition = 0
+
         self.color=[1.0,1.0,1.0]
 
         self.delta_time = self.path_data['timestamp'].diff()
@@ -96,8 +100,6 @@ class Csv_Manager():
         self.start_time = self.path_data['timestamp'].iloc[0]
         self.end_time   = self.path_data['timestamp'].iloc[-1]
     
-    def __del__(self):
-        print('del class')
 
 class MainWindow(uiclass, baseclass):
 
