@@ -1,10 +1,13 @@
 from csv_manager import Csv_Manager
+import aligment_toolbox
 
 import sys
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5 import QtCore, QtGui, QtWidgets
 import pyqtgraph.opengl as gl
+
+from scipy.spatial.transform import Rotation as R
 
 import pyqtgraph as pg
 import math, threading
@@ -38,10 +41,13 @@ class MainWindow(uiclass, baseclass):
         self.gt_first_timestamp = 0
 
         self.rotation_angle = 0
+        self.Rot_pre = np.array([[1,0,0],[0,1,0],[0,0,1]])
 
+        self.timer_icp = QtCore.QTimer()
+
+        #ui item
         self.VIO_file.setEnabled(False)
         self.auto_align_button.setEnabled(False)
-        #ui item
 
         self.GT_file.clicked.connect(self.open_gt_file)
         self.VIO_file.clicked.connect(self.open_vio_file)
@@ -77,6 +83,8 @@ class MainWindow(uiclass, baseclass):
         self.path_color_g_spinbox.valueChanged.connect(self.color_update_G)
         self.path_color_b_spinbox.valueChanged.connect(self.color_update_B)
 
+        self.auto_align_button.clicked.connect(self.auto_alignment)
+
 
     def color_update_R(self):
         self.csv_dict[self.current_item].color[0] = self.path_color_r_spinbox.value()
@@ -92,6 +100,63 @@ class MainWindow(uiclass, baseclass):
         self.timer.timeout.connect(self._looper)
         self.timer.start(20)
         #self.start()
+
+    def auto_alignment(self):
+
+        if self.gt_file == '':
+            return
+
+        self.Rot_pre = np.array([[1,0,0],[0,1,0],[0,0,1]])
+        self.auto_align_button.setEnabled(False)
+
+        SourceCache = self.csv_dict[self.gt_file].cache_data
+        TargetCache = self.csv_dict[self.current_item].cache_data
+
+        self.icp_thread = QtCore.QTimer()
+
+        angle = [0,0,0]
+        def job():
+
+            Rot, Trans = aligment_toolbox.ICP(SourceCache, 
+                                            TargetCache,
+                                            SampleNum = 60)
+            rotation_xyz = R.from_matrix(Rot.T)
+
+            # rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
+            # rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
+
+            # TargetCache[['px','py','pz']] = rotated_coordinates_xyz
+            # TargetCache[['px','py','pz']] -= Trans
+
+            cost = self.Rot_pre.T @ Rot - np.identity(3)
+
+            angles = rotation_xyz.as_euler("zyx",degrees=True)
+
+            # self.csv_dict[self.current_item].z_rotate = angles[0]
+            # self.csv_dict[self.current_item].y_rotate = angles[1]
+            # self.csv_dict[self.current_item].x_rotate = angles[2]
+
+            # self.csv_dict[self.current_item].z_transition = Trans[0][2]
+            # self.csv_dict[self.current_item].y_transition = Trans[0][1]
+            # self.csv_dict[self.current_item].x_transition = Trans[0][0]
+
+            self.Zangle_spinbox.setValue(angles[0])
+            self.Xangle_spinbox.setValue(angles[1])
+            self.Yangle_spinbox.setValue(angles[2])
+
+            self.trans_z_spinbox.setValue(Trans[0][2])
+            self.trans_y_spinbox.setValue(Trans[0][1])
+            self.trans_x_spinbox.setValue(Trans[0][0])
+
+            self.Rot_pre = Rot
+            if ((cost < 10**-10).all()):
+                self.auto_align_button.setEnabled(True)
+                self.icp_thread.stop()
+                
+
+        self.icp_thread.timeout.connect(lambda: job())
+        self.icp_thread.start(50)
+        
 
     def vio_shift_update(self, value):
 
@@ -155,6 +220,7 @@ class MainWindow(uiclass, baseclass):
         self.VIO_file.setEnabled(True)
         self.auto_align_button.setEnabled(True)
         self.timer.start()
+        self.listWidget_CsvList.setCurrentRow(0)
 
     def open_vio_file(self):
         
@@ -175,6 +241,7 @@ class MainWindow(uiclass, baseclass):
         self.update_gt_timestamp(min(self.csv_dict[_name].path_data['timestamp']))
 
         self.timer.start()
+        self.listWidget_CsvList.setCurrentRow(0)
 
     def remove_item(self, item):
 
@@ -185,6 +252,9 @@ class MainWindow(uiclass, baseclass):
         if target == self.gt_file:
             self.VIO_file.setEnabled(False)
             self.auto_align_button.setEnabled(False)
+            self.gt_file = ''
+
+        self.listWidget_CsvList.setCurrentRow(0)
 
     def update_frame(self, item):
         

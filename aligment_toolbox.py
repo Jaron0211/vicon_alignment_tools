@@ -183,10 +183,7 @@ def _closest_point(point, points):
 
 def ICP(source: pd.DataFrame, 
         target: pd.DataFrame, 
-        SampleNum : int = 60, 
-        Rot_pre : np.array = np.array([[0,0,0],[0,0,0],[0,0,0]])) :
-    
-    Rot_pre = Rot_pre
+        SampleNum : int = 60) :
 
     TargetCache = target.copy()
     SourceCache = source.copy()
@@ -215,14 +212,6 @@ def ICP(source: pd.DataFrame,
     
     Trans = TargetCacheCentroid - Rot @ SourceCacheCentroid
     Trans = np.reshape(Trans, (1,3))
-
-    # rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
-
-    # rotation_xyz = R.from_matrix(Rot.T)
-    # rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
-
-    # TargetCache[['px','py','pz']] = rotated_coordinates_xyz - Trans
-    # TargetCache[['px','py','pz']] += SourceCache[['px','py','pz']].loc[0] - TargetCache[['px','py','pz']].loc[0]
 
     return Rot, Trans
 
