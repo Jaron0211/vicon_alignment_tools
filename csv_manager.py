@@ -61,6 +61,7 @@ class Csv_Manager():
         rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
         
         self.cache_data[['px','py','pz']] = rotated_coordinates_xyz * self.y_scale
+        self.cache_data[['px','py','pz']] -= np.array([self.x_transition, self.y_transition, self.z_transition])
 
         _starttime = self.path_data['timestamp'][0]
 

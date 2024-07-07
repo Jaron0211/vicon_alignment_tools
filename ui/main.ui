@@ -298,9 +298,6 @@
       <property name="maximum">
        <number>999999999</number>
       </property>
-      <property name="stepType">
-       <enum>QAbstractSpinBox::DefaultStepType</enum>
-      </property>
       <property name="displayIntegerBase">
        <number>10</number>
       </property>
@@ -433,11 +430,17 @@
         </item>
         <item>
          <widget class="QDoubleSpinBox" name="trans_z_spinbox">
+          <property name="decimals">
+           <number>5</number>
+          </property>
           <property name="minimum">
            <double>-99999999999999.000000000000000</double>
           </property>
           <property name="maximum">
            <double>99999999999999.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.100000000000000</double>
           </property>
          </widget>
         </item>
@@ -456,11 +459,17 @@
         </item>
         <item>
          <widget class="QDoubleSpinBox" name="trans_y_spinbox">
+          <property name="decimals">
+           <number>5</number>
+          </property>
           <property name="minimum">
            <double>-99999999999999.000000000000000</double>
           </property>
           <property name="maximum">
            <double>99999999999999.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.010000000000000</double>
           </property>
          </widget>
         </item>
@@ -479,11 +488,17 @@
         </item>
         <item>
          <widget class="QDoubleSpinBox" name="trans_x_spinbox">
+          <property name="decimals">
+           <number>5</number>
+          </property>
           <property name="minimum">
            <double>-99999999999999.000000000000000</double>
           </property>
           <property name="maximum">
            <double>99999999999999.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.010000000000000</double>
           </property>
          </widget>
         </item>
