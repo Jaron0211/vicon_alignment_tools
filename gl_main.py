@@ -1,5 +1,4 @@
 from csv_manager import Csv_Manager
-import aligment_toolbox
 
 import sys
 from PyQt5.QtGui import *
@@ -15,6 +14,7 @@ import time
 import pandas as pd
 import numpy as np
 import os
+import aligment_toolbox
 
 uiclass, baseclass = pg.Qt.loadUiType("./ui/main.ui")    
 
@@ -83,17 +83,7 @@ class MainWindow(uiclass, baseclass):
         self.path_color_g_spinbox.valueChanged.connect(self.color_update_G)
         self.path_color_b_spinbox.valueChanged.connect(self.color_update_B)
 
-        self.trans_z_spinbox.valueChanged.connect(self.trans_update)
-        self.trans_y_spinbox.valueChanged.connect(self.trans_update)
-        self.trans_x_spinbox.valueChanged.connect(self.trans_update)
-
         self.auto_align_button.clicked.connect(self.auto_alignment)
-
-    def trans_update(self):
-        self.csv_dict[self.current_item].z_transition = self.trans_z_spinbox.value()
-        self.csv_dict[self.current_item].y_transition = self.trans_y_spinbox.value()
-        self.csv_dict[self.current_item].x_transition = self.trans_x_spinbox.value()
-        self.csv_dict[self.current_item].value_changed = True
 
 
     def color_update_R(self):
@@ -121,56 +111,47 @@ class MainWindow(uiclass, baseclass):
 
         SourceCache = self.csv_dict[self.gt_file].cache_data
         TargetCache = self.csv_dict[self.current_item].cache_data
-        TargetOrigin = self.csv_dict[self.current_item].path_data
 
         self.icp_thread = QtCore.QTimer()
 
+        angle = [0,0,0]
         def job():
-            
-            #angle = np.array([self.Xangle_spinbox.value(),self.Yangle_spinbox.value(),self.Zangle_spinbox.value()])
-            #trans = np.array([self.trans_x_spinbox.value(),self.trans_y_spinbox.value(),self.trans_z_spinbox.value()])
 
             Rot, Trans = aligment_toolbox.ICP(SourceCache, 
                                             TargetCache,
                                             SampleNum = 60)
-            
             rotation_xyz = R.from_matrix(Rot.T)
-            #angle_pre = R.from_euler('zyx',angle,degrees=True).as_matrix()
-
-            rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
-            rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
-
-            TargetCache[['px','py','pz']] = rotated_coordinates_xyz
-            TargetCache[['px','py','pz']] -= Trans
-
-            # angle = rotation_xyz.apply(angle_pre) 
-            # rotation_xyz = R.from_matrix(Rot.T)
-
-            # angle = R.from_matrix(angle).as_euler('zyx',degrees=True)
-            # #trans += rotation_xyz.apply(Trans[0])
-
-            # self.Xangle_spinbox.setValue(angle[0])
-            # self.Yangle_spinbox.setValue(angle[1])
-            # self.Zangle_spinbox.setValue(angle[2])
-
-            # self.trans_x_spinbox.setValue(trans[0])
-            # self.trans_y_spinbox.setValue(trans[1])
-            # self.trans_z_spinbox.setValue(trans[2])
 
             # rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
             # rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
 
             # TargetCache[['px','py','pz']] = rotated_coordinates_xyz
             # TargetCache[['px','py','pz']] -= Trans
-            
-            cost = abs(self.Rot_pre.T @ Rot - np.identity(3))
 
-            if ((cost < 10**-10).all()):
-                
-                self.auto_align_button.setEnabled(True)
-                self.icp_thread.stop()
+            cost = self.Rot_pre.T @ Rot - np.identity(3)
+
+            angles = rotation_xyz.as_euler("zyx",degrees=True)
+
+            # self.csv_dict[self.current_item].z_rotate = angles[0]
+            # self.csv_dict[self.current_item].y_rotate = angles[1]
+            # self.csv_dict[self.current_item].x_rotate = angles[2]
+
+            # self.csv_dict[self.current_item].z_transition = Trans[0][2]
+            # self.csv_dict[self.current_item].y_transition = Trans[0][1]
+            # self.csv_dict[self.current_item].x_transition = Trans[0][0]
+
+            self.Zangle_spinbox.setValue(angles[0])
+            self.Xangle_spinbox.setValue(angles[1])
+            self.Yangle_spinbox.setValue(angles[2])
+
+            self.trans_z_spinbox.setValue(Trans[0][2])
+            self.trans_y_spinbox.setValue(Trans[0][1])
+            self.trans_x_spinbox.setValue(Trans[0][0])
 
             self.Rot_pre = Rot
+            if ((cost < 10**-10).all()):
+                self.auto_align_button.setEnabled(True)
+                self.icp_thread.stop()
                 
 
         self.icp_thread.timeout.connect(lambda: job())

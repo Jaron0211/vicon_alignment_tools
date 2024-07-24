@@ -3,7 +3,7 @@ import numpy as np
 from tqdm.auto import tqdm
 
 import matplotlib.pyplot as plt
-import matplotlib.animation as ani
+#import matplotlib.animation as ani
 
 from scipy import stats
 from scipy.spatial.transform import Rotation as R
@@ -140,10 +140,10 @@ def GetRotFromTwoPC(source: pd.DataFrame, target: pd.DataFrame) :
         else:
             itercounter = 0
 
-    worker = ani.FuncAnimation(fig, __animation, interval = 10, frames=range(0,60))
-    writergif = ani.PillowWriter(fps=15) 
+    #worker = ani.FuncAnimation(fig, __animation, interval = 10, frames=range(0,60))
+    #writergif = ani.PillowWriter(fps=15) 
     #plt.show()
-    worker.save('RT_force.gif',writer=writergif)
+    #worker.save('RT_force.gif',writer=writergif)
 
 def GeometryDescriptor(source: pd.DataFrame):
 
