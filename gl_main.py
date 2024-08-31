@@ -63,9 +63,9 @@ class MainWindow(uiclass, baseclass):
         self.range_spinbox.valueChanged.connect(self.update_range)
         self.range_spinbox.setValue(1000)
 
-        self.Zangle_spinbox.valueChanged.connect(self.update_rotation)
-        self.Yangle_spinbox.valueChanged.connect(self.update_rotation)
-        self.Xangle_spinbox.valueChanged.connect(self.update_rotation)
+        # self.Zangle_spinbox.valueChanged.connect(self.update_rotation)
+        # self.Yangle_spinbox.valueChanged.connect(self.update_rotation)
+        # self.Xangle_spinbox.valueChanged.connect(self.update_rotation)
 
         self.listWidget_CsvList.itemClicked.connect(self.update_frame)
         self.listWidget_CsvList.itemDoubleClicked.connect(self.remove_item)
@@ -84,6 +84,10 @@ class MainWindow(uiclass, baseclass):
         self.path_color_b_spinbox.valueChanged.connect(self.color_update_B)
 
         self.auto_align_button.clicked.connect(self.auto_alignment)
+
+        self.TR_updater = QtCore.QTimer()
+        self.TR_updater.timeout.connect(lambda: self.update_path())
+        self.TR_updater.start(50)
 
 
     def color_update_R(self):
@@ -106,15 +110,24 @@ class MainWindow(uiclass, baseclass):
         if self.gt_file == '':
             return
 
-        self.Rot_pre = np.array([[1,0,0],[0,1,0],[0,0,1]])
+        self.Rot_pre = np.eye(3,3)
         self.auto_align_button.setEnabled(False)
 
         SourceCache = self.csv_dict[self.gt_file].cache_data
         TargetCache = self.csv_dict[self.current_item].cache_data
 
-        self.icp_thread = QtCore.QTimer()
+        self.total_rot = np.array([-float(self.csv_dict[self.current_item].z_rotate), 
+                                   -float(self.csv_dict[self.current_item].y_rotate), 
+                                   -float(self.csv_dict[self.current_item].x_rotate)])
+        
+        self.total_rot = R.from_euler('zyx', self.total_rot, True).as_matrix()
+        self.total_trans = np.array([[float(self.csv_dict[self.current_item].x_transition), 
+                                   float(self.csv_dict[self.current_item].y_transition), 
+                                   float(self.csv_dict[self.current_item].z_transition)]])
 
-        angle = [0,0,0]
+        self.icp_thread = QtCore.QTimer()
+        self.TR_updater.stop()
+
         def job():
 
             Rot, Trans = aligment_toolbox.ICP(SourceCache, 
@@ -122,15 +135,16 @@ class MainWindow(uiclass, baseclass):
                                             SampleNum = 60)
             rotation_xyz = R.from_matrix(Rot.T)
 
-            # rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
-            # rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
+            rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
+            rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
 
-            # TargetCache[['px','py','pz']] = rotated_coordinates_xyz
-            # TargetCache[['px','py','pz']] -= Trans
+            TargetCache[['px','py','pz']] = rotated_coordinates_xyz
+            TargetCache[['px','py','pz']] -= Trans
+
+            self.total_rot = rotation_xyz.apply(self.total_rot)
+            self.total_trans += Trans
 
             cost = self.Rot_pre.T @ Rot - np.identity(3)
-
-            angles = rotation_xyz.as_euler("zyx",degrees=True)
 
             # self.csv_dict[self.current_item].z_rotate = angles[0]
             # self.csv_dict[self.current_item].y_rotate = angles[1]
@@ -140,17 +154,24 @@ class MainWindow(uiclass, baseclass):
             # self.csv_dict[self.current_item].y_transition = Trans[0][1]
             # self.csv_dict[self.current_item].x_transition = Trans[0][0]
 
-            self.Zangle_spinbox.setValue(angles[0])
-            self.Xangle_spinbox.setValue(angles[1])
-            self.Yangle_spinbox.setValue(angles[2])
-
-            self.trans_z_spinbox.setValue(Trans[0][2])
-            self.trans_y_spinbox.setValue(Trans[0][1])
-            self.trans_x_spinbox.setValue(Trans[0][0])
 
             self.Rot_pre = Rot
-            if ((cost < 10**-10).all()):
+            
+            if ((abs(cost) < 10**-6).all()):
+
+                result = R.from_matrix(self.total_rot)
+                result = result.as_euler('zyx',True)
+
+                self.Zangle_spinbox.setValue(-result[0])
+                self.Xangle_spinbox.setValue(-result[1])
+                self.Yangle_spinbox.setValue(-result[2])
+
+                self.trans_x_spinbox.setValue(self.total_trans[0][0])
+                self.trans_y_spinbox.setValue(self.total_trans[0][1])
+                self.trans_z_spinbox.setValue(self.total_trans[0][2])
+
                 self.auto_align_button.setEnabled(True)
+                self.TR_updater.start(50)
                 self.icp_thread.stop()
                 
 
@@ -349,12 +370,27 @@ class MainWindow(uiclass, baseclass):
 
         print(self.start_from_index, self.end_to_index)
 
+    def update_path(self):
+
+        self.update_transition()
+        self.update_rotation()
+
+
+    def update_transition(self):
+
+        if self.current_item == '':
+                return
+        
+        self.csv_dict[self.current_item].z_transition = self.trans_z_spinbox.value()  
+        self.csv_dict[self.current_item].y_transition = self.trans_y_spinbox.value()
+        self.csv_dict[self.current_item].x_transition = self.trans_x_spinbox.value()
+
     def update_rotation(self):
 
         if self.current_item == '':
                 return
         
-        self.csv_dict[self.current_item].z_rotate = self.Zangle_spinbox.value()  # Mapping slider value to a reasonable range
+        self.csv_dict[self.current_item].z_rotate = self.Zangle_spinbox.value()
         self.csv_dict[self.current_item].y_rotate = self.Yangle_spinbox.value()
         self.csv_dict[self.current_item].x_rotate = self.Xangle_spinbox.value()
 
