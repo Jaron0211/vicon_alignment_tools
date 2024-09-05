@@ -43,6 +43,9 @@ class MainWindow(uiclass, baseclass):
         self.rotation_angle = 0
         self.Rot_pre = np.array([[1,0,0],[0,1,0],[0,0,1]])
 
+        self.start_from_index = -1
+        self.end_to_index = -1
+
         self.timer_icp = QtCore.QTimer()
 
         #ui item
@@ -53,19 +56,11 @@ class MainWindow(uiclass, baseclass):
         self.VIO_file.clicked.connect(self.open_vio_file)
         self.save_result.clicked.connect(self.save_alignment)
 
-        self.Start_from.sliderMoved.connect(self.update_start_from_and_end_to)
-
-        self.End_to.sliderMoved.connect(self.update_start_from_and_end_to)
+        # self.Start_from.sliderMoved.connect(self.update_start_from_and_end_to)
+        # self.End_to.sliderMoved.connect(self.update_start_from_and_end_to)
 
         self.yscale_spinbox.valueChanged.connect(self.update_y_scale)
         self.xscale_spinbox.valueChanged.connect(self.update_x_scale)
-
-        self.range_spinbox.valueChanged.connect(self.update_range)
-        self.range_spinbox.setValue(1000)
-
-        # self.Zangle_spinbox.valueChanged.connect(self.update_rotation)
-        # self.Yangle_spinbox.valueChanged.connect(self.update_rotation)
-        # self.Xangle_spinbox.valueChanged.connect(self.update_rotation)
 
         self.listWidget_CsvList.itemClicked.connect(self.update_frame)
         self.listWidget_CsvList.itemDoubleClicked.connect(self.remove_item)
@@ -73,36 +68,34 @@ class MainWindow(uiclass, baseclass):
         self.dial_vio_shift.valueChanged.connect(self.vio_shift_update)
         self.dial_gt_shift.valueChanged.connect(self.gt_shift_update)
 
-        self.vio_shift_spinbox.valueChanged.connect(self.vio_shift_update)
-        self.gt_shift_spinbox.valueChanged.connect(self.gt_shift_update)
+        # self.vio_shift_spinbox.valueChanged.connect(self.vio_shift_update)
+        # self.gt_shift_spinbox.valueChanged.connect(self.gt_shift_update)
 
         self.prespect_plot.setBackground(0.3)
         self.two_d_plot.setBackground(0.3)
 
-        self.path_color_r_spinbox.valueChanged.connect(self.color_update_R)
-        self.path_color_g_spinbox.valueChanged.connect(self.color_update_G)
-        self.path_color_b_spinbox.valueChanged.connect(self.color_update_B)
+        self.path_color_r_spinbox.valueChanged.connect(self.color_update_r)
+        self.path_color_g_spinbox.valueChanged.connect(self.color_update_g)
+        self.path_color_b_spinbox.valueChanged.connect(self.color_update_b)
 
         self.auto_align_button.clicked.connect(self.auto_alignment)
 
         self.TR_updater = QtCore.QTimer()
         self.TR_updater.timeout.connect(lambda: self.update_path())
-        self.TR_updater.start(50)
+        self.TR_updater.start(10)
 
 
-    def color_update_R(self):
+    def color_update_r(self):
         self.csv_dict[self.current_item].color[0] = self.path_color_r_spinbox.value()
-
-    def color_update_G(self):
+    def color_update_g(self):
         self.csv_dict[self.current_item].color[1] = self.path_color_g_spinbox.value()
-
-    def color_update_B(self):
+    def color_update_b(self):    
         self.csv_dict[self.current_item].color[2] = self.path_color_b_spinbox.value()
 
     def animate(self):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self._looper)
-        self.timer.start(20)
+        self.timer.start(10)
         #self.start()
 
     def auto_alignment(self):
@@ -116,17 +109,17 @@ class MainWindow(uiclass, baseclass):
         SourceCache = self.csv_dict[self.gt_file].cache_data
         TargetCache = self.csv_dict[self.current_item].cache_data
 
-        self.total_rot = np.array([-float(self.csv_dict[self.current_item].z_rotate), 
-                                   -float(self.csv_dict[self.current_item].y_rotate), 
-                                   -float(self.csv_dict[self.current_item].x_rotate)])
+        self.total_rot = np.array([float(self.csv_dict[self.current_item].z_rotate), 
+                                   float(self.csv_dict[self.current_item].y_rotate), 
+                                   float(self.csv_dict[self.current_item].x_rotate)])
         
-        self.total_rot = R.from_euler('zyx', self.total_rot, True).as_matrix()
+        self.total_rot = R.from_euler('ZYX', self.total_rot, True).as_matrix()
+
         self.total_trans = np.array([[float(self.csv_dict[self.current_item].x_transition), 
                                    float(self.csv_dict[self.current_item].y_transition), 
                                    float(self.csv_dict[self.current_item].z_transition)]])
 
         self.icp_thread = QtCore.QTimer()
-        self.TR_updater.stop()
 
         def job():
 
@@ -142,41 +135,50 @@ class MainWindow(uiclass, baseclass):
             TargetCache[['px','py','pz']] -= Trans
 
             self.total_rot = rotation_xyz.apply(self.total_rot)
-            self.total_trans += Trans
-
             cost = self.Rot_pre.T @ Rot - np.identity(3)
 
-            # self.csv_dict[self.current_item].z_rotate = angles[0]
-            # self.csv_dict[self.current_item].y_rotate = angles[1]
-            # self.csv_dict[self.current_item].x_rotate = angles[2]
+            result = R.from_matrix(self.total_rot.T)
 
-            # self.csv_dict[self.current_item].z_transition = Trans[0][2]
-            # self.csv_dict[self.current_item].y_transition = Trans[0][1]
-            # self.csv_dict[self.current_item].x_transition = Trans[0][0]
+            TargetCacheCentroid = np.asarray(self.csv_dict[self.current_item].path_data[['px','py','pz']].mean())
+            SourceCacheCentroid = np.asarray(TargetCache[['px','py','pz']].mean())
 
+            self.total_trans = self.total_rot.T @ TargetCacheCentroid - SourceCacheCentroid
+
+            result = R.from_matrix(self.total_rot)
+            result = result.as_euler('zyx',True)
+
+            self.csv_dict[self.current_item].z_rotate = -result[0]
+            self.csv_dict[self.current_item].y_rotate = -result[1]
+            self.csv_dict[self.current_item].x_rotate = -result[2]
+
+            self.csv_dict[self.current_item].x_transition = self.total_trans[0]
+            self.csv_dict[self.current_item].y_transition = self.total_trans[1]
+            self.csv_dict[self.current_item].z_transition = self.total_trans[2]
+
+            self.Zangle_spinbox.setValue(-result[0])
+            self.Yangle_spinbox.setValue(-result[1])
+            self.Xangle_spinbox.setValue(-result[2])
+
+            self.trans_x_spinbox.setValue(self.total_trans[0])
+            self.trans_y_spinbox.setValue(self.total_trans[1])
+            self.trans_z_spinbox.setValue(self.total_trans[2])
 
             self.Rot_pre = Rot
             
-            if ((abs(cost) < 10**-6).all()):
+            if ((abs(cost) < 10**-4).all()):
 
-                result = R.from_matrix(self.total_rot)
-                result = result.as_euler('zyx',True)
+                
+                SourceCache_1, _, BestTimeShift= aligment_toolbox.AlignmentPath(SourceCache, TargetCache)
 
-                self.Zangle_spinbox.setValue(-result[0])
-                self.Xangle_spinbox.setValue(-result[1])
-                self.Yangle_spinbox.setValue(-result[2])
-
-                self.trans_x_spinbox.setValue(self.total_trans[0][0])
-                self.trans_y_spinbox.setValue(self.total_trans[0][1])
-                self.trans_z_spinbox.setValue(self.total_trans[0][2])
-
+                self.csv_dict[self.gt_file].cache_data['timestamp'] = SourceCache_1['timestamp']
+                self.csv_dict[self.current_item].shift = -BestTimeShift
+                
                 self.auto_align_button.setEnabled(True)
-                self.TR_updater.start(50)
                 self.icp_thread.stop()
                 
 
         self.icp_thread.timeout.connect(lambda: job())
-        self.icp_thread.start(50)
+        self.icp_thread.start(30)
         
 
     def vio_shift_update(self, value):
@@ -202,31 +204,13 @@ class MainWindow(uiclass, baseclass):
         self.gt_shift_last = value
         return
 
-    def update_gt_timestamp(self, timestamp):
-
-        if type(timestamp) not in [ float , int ]:
-            print('type error')
-            return
-        
-        if self.gt_file == '':
-            print('no gt file')
-            return 
-        
-        if not self.csv_dict[self.gt_file].has_timestamp :
-            print('make time')
-
-            self.csv_dict[self.gt_file].create_timestamp_via_Hz(timestamp)
-            self.csv_dict[self.gt_file].has_timestamp = True
-            self.csv_dict[self.gt_file].value_changed = True
-            
-
     def open_gt_file(self):
         
         self.timer.stop()
         gt_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
                                     "Choose the GT path file",  
                                     self.cwd, # 起始路径 
-                                    "All Files (*);;Text Files (*.txt)")
+                                    "EuRoC Files (*.csv);;TUM Files (*.tum);;All Files (*)")
         
         _name = gt_file.split('/')[-1]
         if gt_file == "" or (_name in self.csv_dict):
@@ -249,7 +233,7 @@ class MainWindow(uiclass, baseclass):
         vio_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
                                     "Choose the VIO path file",  
                                     self.cwd, # 起始路径 
-                                    "All Files (*);;Text Files (*.txt)") 
+                                    "EuRoC Files (*.csv);;TUM Files (*.tum);;All Files (*)") 
 
         _name = vio_file.split('/')[-1]
 
@@ -259,7 +243,6 @@ class MainWindow(uiclass, baseclass):
         self.csv_dict[_name] = Csv_Manager(vio_file)
         self.listWidget_CsvList.addItem(_name)
         self.listWidget_CsvList.findItems(_name, Qt.MatchExactly)[0].setForeground(Qt.gray)
-        self.update_gt_timestamp(min(self.csv_dict[_name].path_data['timestamp']))
 
         self.timer.start()
         self.listWidget_CsvList.setCurrentRow(0)
@@ -285,8 +268,12 @@ class MainWindow(uiclass, baseclass):
         gt_class = self.csv_dict[self.gt_file]
 
         self.Zangle_spinbox.setValue(csv_class.z_rotate)
-        self.Xangle_spinbox.setValue(csv_class.y_rotate)
-        self.Yangle_spinbox.setValue(csv_class.x_rotate)
+        self.Yangle_spinbox.setValue(csv_class.y_rotate)
+        self.Xangle_spinbox.setValue(csv_class.x_rotate)
+
+        self.trans_x_spinbox.setValue(csv_class.x_transition)
+        self.trans_y_spinbox.setValue(csv_class.y_transition)
+        self.trans_z_spinbox.setValue(csv_class.z_transition)
 
         self.xscale_spinbox.setValue(csv_class.x_scale)
         self.yscale_spinbox.setValue(csv_class.y_scale)
@@ -296,13 +283,13 @@ class MainWindow(uiclass, baseclass):
         self.path_color_b_spinbox.setValue(csv_class.color[2])
 
         self.vio_shift_spinbox.setValue(int(csv_class.shift/100000000))
-        self.vio_shift_spinbox.setValue(int(gt_class.shift/100000000))
+        self.gt_shift_spinbox.setValue(int(gt_class.shift/100000000))
 
         if not math.isnan(csv_class.start_time) :
-            self.start_time_spinbox.setValue(int(csv_class.start_time/1000000000000))
+            self.start_time_spinbox.setValue(int(csv_class.start_time/100000000))
 
         if not math.isnan(csv_class.end_time) :  
-            self.end_time_spinbox.setValue(int(csv_class.end_time/1000000000000))
+            self.end_time_spinbox.setValue(int(csv_class.end_time/100000000))
 
     def update_x_scale(self, value):
 
@@ -319,13 +306,6 @@ class MainWindow(uiclass, baseclass):
         
         self.csv_dict[self.current_item].y_scale = value
         self.csv_dict[self.current_item].value_changed = True
-
-    def update_range(self, value):
-
-        if self.current_item == '':
-                return
-        
-        self.range = self.cal_vio_inter_value(value*100)-min(self.vio_data['timestamp'])
 
     def cal_vio_inter_value(self, value):
         
@@ -349,26 +329,16 @@ class MainWindow(uiclass, baseclass):
         
         self.csv_dict[self.gt_file].shift = value
 
-    def update_end_to(self, value):
+    def update_start_from_and_end_to(self):
         
-        new_index = self.cal_vio_inter_value(value)
+        if self.gt_file == '' : return
+        x_min ,x_max = self.csv_dict[self.gt_file].cache_data['timestamp'].min(), self.csv_dict[self.gt_file].cache_data['timestamp'].max()
 
-        if new_index < self.end_to_index:
-            self.start_from_index = new_index
-        else:
-            self.start_from_index = self.end_to_index
+        self.start_from_index =  x_min + self.Start_from.value() /100 * (x_max - x_min)
+        self.end_to_index = x_max - self.End_to.value() /100 * (x_max - x_min)
 
-    def update_start_from_and_end_to(self, value):
-
-        [x_min ,x_max ] = self.canvas.ax.get_xlim()
-
-        self.start_from_index =  x_min + self.Start_from.value() /10000 * (x_max - x_min)
-        self.end_to_index = x_max - self.End_to.value() /10000 * (x_max - x_min)
-
-        if self.start_from_index > self.end_to_index:
-            self.start_from_index = self.end_to_index
-
-        print(self.start_from_index, self.end_to_index)
+        # if self.start_from_index > self.end_to_index:
+        #     self.start_from_index = self.end_to_index
 
     def update_path(self):
 
@@ -407,32 +377,14 @@ class MainWindow(uiclass, baseclass):
         self.timer_process.start(100)
         
 
-    def rotated_figure(self, num):
-
-        self.rotation_angle = self.canvas_3d.ax.azim + 1
-        # Normalize the angle to the range [-180, 180] for display
-        angle_norm = (self.rotation_angle + 180) % 360 - 180
-
-        # Cycle through a full rotation of elevation, then azimuth, roll, and all
-        # elev = azim = roll = 0
-        azim = 0
-        if self.rotation_angle <= 360:
-            azim = self.rotation_angle
-        else:
-            azim = angle_norm
-
-        self.canvas_3d.ax.view_init(self.canvas_3d.ax.elev, azim)
-        print(self.rotation_angle)
-
-        return [self.canvas_3d.ax]
-
     def save_alignment(self):
 
         for name, csv in self.csv_dict.items():
             if type(csv) != Csv_Manager:
                 continue
 
-            csv.SaveModifyCsv(self.start_from_index, self.end_to_index)
+            if self.start_from_index > 0 and self.end_to_index > 0:
+                csv.SaveModifyCsv(self.start_from_index, self.end_to_index)
 
     def _looper(self):
         
@@ -440,7 +392,10 @@ class MainWindow(uiclass, baseclass):
         self.two_d_plot.clear()
         self.three_d_plot.clear()
         
+        self.three_d_plot.addItem(gl.GLAxisItem(size=QVector3D(1.0,1.0,1.0),glOptions='opaque'))
         self.three_d_plot.addItem(gl.GLGridItem())
+
+        self.update_start_from_and_end_to()
 
         for name, csv in self.csv_dict.copy().items():
  
@@ -449,35 +404,142 @@ class MainWindow(uiclass, baseclass):
 
             plot_cache = csv.cache_data.copy()
 
-            spl = gl.GLLinePlotItem(pos = list(plot_cache[['px','py','pz']].itertuples(index=False, name=None)), 
-                                       color = (
-                                                       csv.color[0], 
-                                                       csv.color[1], 
-                                                       csv.color[2],
-                                                       .5),
-                                        mode = 'line_strip', width = 2)
-            
-            self.three_d_plot.addItem(spl)
-            self.prespect_plot.plot(plot_cache['px'], 
-                                    plot_cache['py'],
-                                    pen = (
-                                            csv.color[0]*255, 
-                                            csv.color[1]*255, 
-                                            csv.color[2]*255,
-                                            ),
-                                    width=2)
-            
-            self.two_d_plot.plot(plot_cache['timestamp'].astype(float), 
-                                 plot_cache['px'],
-                                 pen = (
-                                            csv.color[0]*255, 
-                                            csv.color[1]*255, 
-                                            csv.color[2]*255,
-                                            ),
-                                width=2
-                                )
+            if (self.start_from_index > 0 ) and (self.end_to_index > 0):
+
+                plot_cache_in = plot_cache[plot_cache['timestamp'].between(self.start_from_index, self.end_to_index, inclusive="both")]
+                plot_cache_outrange_down = plot_cache[plot_cache['timestamp'] < self.start_from_index]
+                plot_cache_outrange_up = plot_cache[plot_cache['timestamp'] > self.end_to_index]
 
 
+                self.two_d_plot.plot(list(tuple(plot_cache_in['timestamp'].astype(float))), 
+                        list(tuple(plot_cache_in['pz'])),
+                        pen = (
+                                csv.color[0]*255, 
+                                csv.color[1]*255, 
+                                csv.color[2]*255,
+                                ),
+                    width=2
+                    )
+                self.two_d_plot.plot(list(tuple(plot_cache_outrange_up['timestamp'].astype(float))), 
+                        list(tuple(plot_cache_outrange_up['pz'])),
+                        pen = (
+                                csv.color[0]*255/2, 
+                                csv.color[1]*255/2, 
+                                csv.color[2]*255/2,
+                                ),
+                    width=2
+                    )
+                self.two_d_plot.plot(list(tuple(plot_cache_outrange_down['timestamp'].astype(float))), 
+                        list(tuple(plot_cache_outrange_down['pz'])),
+                        pen = (
+                                csv.color[0]*255/2, 
+                                csv.color[1]*255/2, 
+                                csv.color[2]*255/2,
+                                ),
+                    width=2
+                    )
+                
+                if (plot_cache_outrange_down.size > 0):
+                    spl_out = gl.GLLinePlotItem(pos = list(plot_cache_outrange_down[['px','py','pz']].itertuples(index=False, name=None)), 
+                                        color = (
+                                                        csv.color[0], 
+                                                        csv.color[1], 
+                                                        csv.color[2],
+                                                        0.2),
+                                            mode = 'line_strip', width = 1)
+                    
+                    self.three_d_plot.addItem(spl_out)
+                if (plot_cache_outrange_up.size > 0):
+                    spl_out = gl.GLLinePlotItem(pos = list(plot_cache_outrange_up[['px','py','pz']].itertuples(index=False, name=None)), 
+                                        color = (
+                                                        csv.color[0], 
+                                                        csv.color[1], 
+                                                        csv.color[2],
+                                                        0.2),
+                                            mode = 'line_strip', width = 1)
+                    
+                    self.three_d_plot.addItem(spl_out)
+
+                spl_in = gl.GLLinePlotItem(pos = list(plot_cache_in[['px','py','pz']].itertuples(index=False, name=None)), 
+                                        color = (
+                                                        csv.color[0], 
+                                                        csv.color[1], 
+                                                        csv.color[2],
+                                                        0.5),
+                                            mode = 'line_strip', width = 1, glOptions='opaque')
+                
+                self.three_d_plot.addItem(spl_in)
+
+                self.prespect_plot.plot(list(tuple(plot_cache_outrange_down['px'])), 
+                                        list(tuple(plot_cache_outrange_down['py'])),
+                                        pen = (
+                                                csv.color[0]*255/2, 
+                                                csv.color[1]*255/2, 
+                                                csv.color[2]*255/2,
+                                                ),
+                                        width=2)
+                self.prespect_plot.plot(list(tuple(plot_cache_outrange_up['px'])), 
+                                        list(tuple(plot_cache_outrange_up['py'])),
+                                        pen = (
+                                                csv.color[0]*255/2, 
+                                                csv.color[1]*255/2, 
+                                                csv.color[2]*255/2,
+                                                ),
+                                        width=2)
+                self.prespect_plot.plot(list(tuple(plot_cache_in['px'])), 
+                                        list(tuple(plot_cache_in['py'])),
+                                        pen = (
+                                                csv.color[0]*255, 
+                                                csv.color[1]*255, 
+                                                csv.color[2]*255,
+                                                ),
+                                        width=2)
+                start_from_line = pg.InfiniteLine(self.start_from_index, angle = 90, pen = (
+                                                255, 
+                                                0, 
+                                                0,
+                                                ),
+                                                movable = False,
+                                                )
+                end_to_line = pg.InfiniteLine(self.end_to_index, angle = 90, pen = (
+                                                0, 
+                                                0, 
+                                                255,
+                                                ),
+                                                movable = False,
+                                                )
+                self.two_d_plot.addItem(start_from_line, ignoreBounds=True)
+                self.two_d_plot.addItem(end_to_line, ignoreBounds=True)
+
+            else:
+                self.two_d_plot.plot(list(tuple(plot_cache['timestamp'].astype(float))), 
+                        list(tuple(plot_cache['pz'])),
+                        pen = (
+                                csv.color[0]*255, 
+                                csv.color[1]*255, 
+                                csv.color[2]*255,
+                                ),
+                    width=2
+                    )
+                spl = gl.GLLinePlotItem(pos = list(plot_cache[['px','py','pz']].itertuples(index=False, name=None)), 
+                                        color = (
+                                                        csv.color[0], 
+                                                        csv.color[1], 
+                                                        csv.color[2],
+                                                        0.5),
+                                            mode = 'line_strip', width = 1, glOptions='opaque')
+                
+                self.three_d_plot.addItem(spl)
+
+                self.prespect_plot.plot(list(tuple(plot_cache['px'])), 
+                                        list(tuple(plot_cache['py'])),
+                                        pen = (
+                                                csv.color[0]*255, 
+                                                csv.color[1]*255, 
+                                                csv.color[2]*255,
+                                                ),
+                                        width=2)
+            
     def start(self):
         QtWidgets.QApplication.instance().exec()
 

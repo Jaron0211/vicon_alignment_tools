@@ -274,15 +274,15 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
     SourceCache = source.copy()
     TargetCache = target.copy()
 
-    if (source['timestamp'].isna().any()):
+    if (source['timestamp'].isna().any() or TargetCache['timestamp'].min() >= SourceCache['timestamp'].max() or TargetCache['timestamp'].max() <= SourceCache['timestamp'].min()):
         SourceCache = CreateTimeViaHz(source, target['timestamp'].loc[0])
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.set_title('Before Iteration')
-    ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
-    ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
-    plt.show()
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111)
+    # ax.set_title('Before Iteration')
+    # ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
+    # ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
+    # plt.show()
 
     BestTimeShift = 0
     Pre_BestTimeShift = 10**100
@@ -315,6 +315,8 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
         _EndOfSecondIteration = int(BestTimeShift + _Step)
         _Step = int((_EndOfSecondIteration - _StartOfSecondIteration)/20)
 
+        if (Pre_BestTimeShift == 0): break
+
         print(1 - abs( BestTimeShift / Pre_BestTimeShift))
         if 1 - abs( BestTimeShift / Pre_BestTimeShift) == 0:
             print('Best time shift: ', BestTimeShift)
@@ -322,15 +324,15 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
 
         Pre_BestTimeShift = BestTimeShift
     
-    SourceCache['timestamp'] += BestTimeShift
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.set_title('After Iteration')
-    ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
-    ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
-    plt.show()
+    #TargetCache['timestamp'] -= BestTimeShift
+    #fig = plt.figure()
+    #ax = fig.add_subplot(111)
+    #ax.set_title('After Iteration')
+    #ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
+    #ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
+    #plt.show()
 
-    return SourceCache, TargetCache
+    return SourceCache, TargetCache, BestTimeShift
     
 
 if __name__ == '__main__':

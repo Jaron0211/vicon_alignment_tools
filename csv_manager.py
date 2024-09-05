@@ -39,7 +39,8 @@ class Csv_Manager():
         self.y_transition = 0
         self.x_transition = 0
 
-        self.color=[1.0,1.0,1.0]
+        import random
+        self.color=[random.randrange(50,100,1)/100, random.randrange(50,100,1)/100, random.randrange(50, 100, 1)/100]
 
         self.value_changed = False
 
@@ -47,9 +48,9 @@ class Csv_Manager():
     
     def SaveModifyCsv(self, start_time, end_time):
 
-        self.cache_data[self.cache_data['timestamp'].between(start_time, end_time, inclusive="both")]
         self.cache_data['timestamp'] = self.cache_data['timestamp'].astype(float)  
-        self.cache_data.to_csv("Aligned_{}.csv".format(self.name) ,index=False, header=None, float_format='%.9f')
+        save_cache = self.cache_data[self.cache_data['timestamp'].between(start_time, end_time, inclusive="both")]
+        save_cache[['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz']].to_csv("Aligned_{}.csv".format(self.name) ,index=False, header=None, float_format='%.9f')
         
     def ProcessData(self):
 
@@ -57,7 +58,7 @@ class Csv_Manager():
             return
         
         rotated_coordinates_xyz = np.column_stack((self.path_data['px'], self.path_data['py'], self.path_data['pz']))
-        rotation_xyz = R.from_euler('ZYX', [self.z_rotate,self.y_rotate,self.x_rotate], degrees=True)
+        rotation_xyz = R.from_euler('ZYX', [self.z_rotate, self.y_rotate, self.x_rotate], degrees=True)
         rotated_coordinates_xyz = rotation_xyz.apply(rotated_coordinates_xyz)
         
         self.cache_data[['px','py','pz']] = rotated_coordinates_xyz * self.y_scale
