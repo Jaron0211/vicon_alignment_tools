@@ -60,8 +60,8 @@ class Csv_Manager():
     
     def SaveModifyCsv(self, start_time, end_time):
 
-        self.cache_data['timestamp'] = self.cache_data['timestamp'].astype(float)  
-        save_cache = self.cache_data[self.cache_data['timestamp'].between(start_time, end_time, inclusive="both")]
+        self.cache_data['timestamp'] = self.cache_data['timestamp'].astype(float) - self.shift
+        save_cache = self.cache_data[self.cache_data['timestamp'].between(start_time, end_time, inclusive='both')]
         save_cache[['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz']].to_csv("Aligned_{}.csv".format(self.name) ,index=False, header=None, float_format='%.9f')
         
     def ProcessData(self):

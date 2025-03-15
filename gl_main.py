@@ -52,7 +52,7 @@ class MainWindow(uiclass, baseclass):
         self.VIO_file.setEnabled(False)
         self.auto_align_button.setEnabled(False)
 
-        self.GT_file.clicked.connect(self.open_gt_file)
+        self.GT_file.clicked.connect(self.toggle_gt_file)
         self.VIO_file.clicked.connect(self.open_vio_file)
         self.save_result.clicked.connect(self.save_alignment)
 
@@ -93,12 +93,28 @@ class MainWindow(uiclass, baseclass):
         
         self.process_timer = QtCore.QTimer()
         self.process_timer.timeout.connect(lambda: self.csv_process())
-    
-    def timer_start(self):
         
+        self.alignment_worker = None
+
+        self.init_timers()
+
+    def init_timers(self):
         self.looper_timer.start(10)
         self.process_timer.start(10)
         self.TR_updater.start(10)
+
+    def closeEvent(self, event):
+        self.looper_timer.stop()
+        self.process_timer.stop()
+        self.TR_updater.stop()
+        if hasattr(self, 'icp_thread') and self.icp_thread.isActive():
+            self.icp_thread.stop()
+        if self.alignment_worker is not None:
+            self.alignment_worker.terminate()
+        event.accept()
+
+    def timer_start(self):
+        self.init_timers()
 
     def color_update_r(self):
         if self.current_item == '':
@@ -114,19 +130,33 @@ class MainWindow(uiclass, baseclass):
         self.csv_dict[self.current_item].color[2] = self.path_color_b_spinbox.value()
 
     def auto_alignment(self):
+        # If currently running, stop the alignment
+        if hasattr(self, 'icp_thread') and self.icp_thread.isActive():
+            self.icp_thread.stop()
+            self.auto_align_button.setText("Auto Alignment")
+            self.auto_align_button.setEnabled(True)
+            return
 
         if self.gt_file == '' or self.current_item == '':
             return
 
-        self.Rot_pre = np.eye(3,3)
-        self.auto_align_button.setEnabled(False)
+        # Reset transformations
+        self.Rot_pre = np.eye(3)
+        self.total_rot = np.eye(3)
+        self.total_trans = np.zeros((3,))
+
+        # Change button text to indicate stopping is possible
+        self.auto_align_button.setText("Stop Alignment")
 
         SourceCache = self.csv_dict[self.gt_file].cache_data
         TargetCache = self.csv_dict[self.current_item].cache_data
 
-        self.total_rot = np.array([float(self.csv_dict[self.current_item].z_rotate), 
-                                   float(self.csv_dict[self.current_item].y_rotate), 
-                                   float(self.csv_dict[self.current_item].x_rotate)])
+        if self.start_from_index > 0 and self.end_to_index > 0:
+            TargetCache = TargetCache[TargetCache['timestamp'].between(self.start_from_index, self.end_to_index, inclusive='both')]
+
+        self.total_rot = np.array([-float(self.csv_dict[self.current_item].z_rotate), 
+                                   -float(self.csv_dict[self.current_item].y_rotate), 
+                                   -float(self.csv_dict[self.current_item].x_rotate)])
         
         self.total_rot = R.from_euler('ZYX', self.total_rot, True).as_matrix()
 
@@ -138,7 +168,8 @@ class MainWindow(uiclass, baseclass):
         def job():
             Rot, Trans = aligment_toolbox.ICP(SourceCache, 
                                             TargetCache,
-                                            SampleNum = 60)
+                                            SampleNum = 200)
+            
             rotation_xyz = R.from_matrix(Rot.T)
 
             rotated_coordinates_xyz = np.column_stack((TargetCache['px'], TargetCache['py'], TargetCache['pz']))
@@ -149,7 +180,6 @@ class MainWindow(uiclass, baseclass):
 
             self.total_rot = rotation_xyz.apply(self.total_rot)
             cost = self.Rot_pre.T @ Rot - np.identity(3)
-
             result = R.from_matrix(self.total_rot.T)
 
             TargetCacheCentroid = np.asarray(self.csv_dict[self.current_item].path_data[['px','py','pz']].mean())
@@ -168,9 +198,9 @@ class MainWindow(uiclass, baseclass):
             self.csv_dict[self.current_item].y_transition = self.total_trans[1]
             self.csv_dict[self.current_item].z_transition = self.total_trans[2]
 
-            self.Zangle_spinbox.setValue(-result[0])
-            self.Yangle_spinbox.setValue(-result[1])
-            self.Xangle_spinbox.setValue(-result[2])
+            self.Zangle_spinbox.setValue(self.csv_dict[self.current_item].z_rotate)
+            self.Yangle_spinbox.setValue(self.csv_dict[self.current_item].y_rotate)
+            self.Xangle_spinbox.setValue(self.csv_dict[self.current_item].x_rotate)
 
             self.trans_x_spinbox.setValue(self.total_trans[0])
             self.trans_y_spinbox.setValue(self.total_trans[1])
@@ -178,19 +208,44 @@ class MainWindow(uiclass, baseclass):
 
             self.Rot_pre = Rot
             
-            if ((abs(cost) < 10**-4).all()):
+            if ((abs(cost) < 10**-6).all()):
+                # Create worker thread for alignment
+                class AlignmentWorker(QtCore.QThread):
+                    finished = QtCore.pyqtSignal(tuple)
+                    
+                    def __init__(self, source, target):
+                        super().__init__()
+                        self.source = source
+                        self.target = target  # Fix the initialization of target
+                        
+                    def run(self):
+                        result = aligment_toolbox.AlignmentPath(self.source, self.target)
+                        self.finished.emit(result)
 
-                SourceCache_1, _, BestTimeShift= aligment_toolbox.AlignmentPath(SourceCache, TargetCache)
-
-                self.csv_dict[self.gt_file].cache_data['timestamp'] = SourceCache_1['timestamp']
-                self.csv_dict[self.current_item].shift = BestTimeShift
-                
-                self.auto_align_button.setEnabled(True)
+                # Create and start worker thread
+                # Stop ICP thread before starting alignment
                 self.icp_thread.stop()
+                self.auto_align_button.setText("Auto Alignment") 
 
+                # Create and run alignment worker once
+                self.alignment_worker = AlignmentWorker(SourceCache, TargetCache)
+                self.alignment_worker.finished.connect(self.finish_alignment)
+                self.alignment_worker.start()
+                return
+                
         self.icp_thread.timeout.connect(lambda: job())
         self.icp_thread.start()
 
+    def finish_alignment(self, result):
+        SourceCache_1, _, BestTimeShift = result
+        print(f"Alignment result: {SourceCache_1.head()}")
+        print(f"Best time shift: {BestTimeShift}")
+        self.csv_dict[self.gt_file].cache_data['timestamp'] = SourceCache_1['timestamp']
+        self.csv_dict[self.current_item].shift = BestTimeShift
+        self.auto_align_button.setText("Auto Alignment")
+        self.auto_align_button.setEnabled(True)
+        self.icp_thread.stop()
+        self.alignment_worker = None
 
     def vio_shift_update(self, value):
 
@@ -208,6 +263,7 @@ class MainWindow(uiclass, baseclass):
         if not math.isnan(self.csv_dict[self.current_item].end_time) :  
             self.end_time_spinbox.setValue(int(self.csv_dict[self.current_item].end_time/100000000))
 
+        print(self.csv_dict[self.current_item].shift)
         return
     
     def gt_shift_update(self, value):
@@ -222,8 +278,13 @@ class MainWindow(uiclass, baseclass):
         self.gt_shift_last = value
         return
 
+    def toggle_gt_file(self):
+        if self.gt_file:
+            self.remove_gt_file()
+        else:
+            self.open_gt_file()
+
     def open_gt_file(self):
-        
         self.threading_lock = True
         gt_file, filetype = QtWidgets.QFileDialog.getOpenFileName(self,  
                                     "Choose the GT path file",  
@@ -232,6 +293,7 @@ class MainWindow(uiclass, baseclass):
         
         _name = gt_file.split('/')[-1]
         if gt_file == "" or (_name in self.csv_dict):
+            self.threading_lock = False
             return
         
         self.csv_dict[_name] = Csv_Manager(gt_file)
@@ -242,7 +304,21 @@ class MainWindow(uiclass, baseclass):
 
         self.VIO_file.setEnabled(True)
         self.auto_align_button.setEnabled(True)
+        self.GT_file.setText("Delete GT File")
         self.threading_lock = False
+
+    def remove_gt_file(self):
+        if self.gt_file:
+            self.threading_lock = True
+            self.csv_dict.pop(self.gt_file)
+            items = self.listWidget_CsvList.findItems(self.gt_file, Qt.MatchExactly)
+            if items:
+                self.listWidget_CsvList.takeItem(self.listWidget_CsvList.row(items[0]))
+            self.gt_file = ''
+            self.VIO_file.setEnabled(False)
+            self.auto_align_button.setEnabled(False)
+            self.GT_file.setText("Open GT File")
+            self.threading_lock = False
 
     def open_vio_file(self):
         
@@ -264,20 +340,18 @@ class MainWindow(uiclass, baseclass):
         self.threading_lock = False
 
     def remove_item(self, item):
-        
         self.threading_lock = True
 
         target = item.text()
 
         if target == self.gt_file:
-            self.gt_file = ''
-            self.VIO_file.setEnabled(False)
-            self.auto_align_button.setEnabled(False)
+            self.remove_gt_file()
         if target == self.current_item:
             self.current_item = ''
 
-        self.csv_dict.pop(target)
-        self.listWidget_CsvList.takeItem(self.listWidget_CsvList.currentRow())
+        if target in self.csv_dict:
+            self.csv_dict.pop(target)
+            self.listWidget_CsvList.takeItem(self.listWidget_CsvList.currentRow())
 
         self.threading_lock = False
 
@@ -406,176 +480,92 @@ class MainWindow(uiclass, baseclass):
             if self.start_from_index > 0 and self.end_to_index > 0:
                 csv.SaveModifyCsv(self.start_from_index, self.end_to_index)
 
-    def _looper(self):  
-
-        deb_t = time.time()
+    def _looper(self):
         if self.threading_lock:
             return
         
+        # Clear plots once
         self.prespect_plot.clear()
         self.two_d_plot.clear()
         self.three_d_plot.clear()
         
+        # Add static items
         self.three_d_plot.addItem(gl.GLAxisItem(size=QVector3D(1.0,1.0,1.0),glOptions='opaque'))
         self.three_d_plot.addItem(gl.GLGridItem())
 
         self.update_start_from_and_end_to()
 
-        for name, csv in self.csv_dict.copy().items():
- 
-            if type(csv) != Csv_Manager:
+        # Process each CSV
+        for name, csv in self.csv_dict.items():
+            if not isinstance(csv, Csv_Manager):
                 continue
 
-            plot_cache = csv.cache_data.copy()
+            plot_cache = csv.cache_data
+            color = csv.color
+            color_rgb = (color[0]*255, color[1]*255, color[2]*255)
+            color_rgb_dim = (color[0]*127.5, color[1]*127.5, color[2]*127.5)
+            color_3d = (color[0], color[1], color[2], 0.5)
+            color_3d_dim = (color[0], color[1], color[2], 0.2)
 
-            if (self.start_from_index > 0 ) and (self.end_to_index > 0):
+            # Apply timestamp shift
+            plot_timestamps = plot_cache['timestamp'].values - csv.shift
 
-                plot_cache_in = plot_cache[plot_cache['timestamp'].between(self.start_from_index, self.end_to_index, inclusive="both")]
-                plot_cache_outrange_down = plot_cache[plot_cache['timestamp'] < self.start_from_index]
-                plot_cache_outrange_up = plot_cache[plot_cache['timestamp'] > self.end_to_index]
+            if self.start_from_index > 0 and self.end_to_index > 0:
+                # Use boolean indexing instead of multiple filters
+                mask_in = (plot_timestamps >= self.start_from_index) & (plot_timestamps <= self.end_to_index)
+                plot_cache_in = plot_cache[mask_in]
+                timestamps_in = plot_timestamps[mask_in]
+                plot_cache_out_down = plot_cache[plot_timestamps < self.start_from_index]
+                timestamps_out_down = plot_timestamps[plot_timestamps < self.start_from_index]
+                plot_cache_out_up = plot_cache[plot_timestamps > self.end_to_index]
+                timestamps_out_up = plot_timestamps[plot_timestamps > self.end_to_index]
 
+                # Plot 2D views
+                for cache, times, color in [(plot_cache_in, timestamps_in, color_rgb), 
+                                          (plot_cache_out_down, timestamps_out_down, color_rgb_dim),
+                                          (plot_cache_out_up, timestamps_out_up, color_rgb_dim)]:
+                    if len(cache) > 0:
+                        self.two_d_plot.plot(times, 
+                                           cache['pz'].values,
+                                           pen=color, width=2)
+                        self.prespect_plot.plot(cache['px'].values,
+                                              cache['py'].values,
+                                              pen=color, width=2)
 
-                self.two_d_plot.plot(list(tuple(plot_cache_in['timestamp'].astype(float))), 
-                        list(tuple(plot_cache_in['pz'])),
-                        pen = (
-                                csv.color[0]*255, 
-                                csv.color[1]*255, 
-                                csv.color[2]*255,
-                                ),
-                    width=2
-                    )
-                self.two_d_plot.plot(list(tuple(plot_cache_outrange_up['timestamp'].astype(float))), 
-                        list(tuple(plot_cache_outrange_up['pz'])),
-                        pen = (
-                                csv.color[0]*255/2, 
-                                csv.color[1]*255/2, 
-                                csv.color[2]*255/2,
-                                ),
-                    width=2
-                    )
-                self.two_d_plot.plot(list(tuple(plot_cache_outrange_down['timestamp'].astype(float))), 
-                        list(tuple(plot_cache_outrange_down['pz'])),
-                        pen = (
-                                csv.color[0]*255/2, 
-                                csv.color[1]*255/2, 
-                                csv.color[2]*255/2,
-                                ),
-                    width=2
-                    )
-                
-                if (plot_cache_outrange_down.size > 0):
-                    spl_out = gl.GLLinePlotItem(pos = list(plot_cache_outrange_down[['px','py','pz']].itertuples(index=False, name=None)), 
-                                        color = (
-                                                        csv.color[0], 
-                                                        csv.color[1], 
-                                                        csv.color[2],
-                                                        0.2),
-                                            mode = 'line_strip', width = 1)
-                    
-                    self.three_d_plot.addItem(spl_out)
-                if (plot_cache_outrange_up.size > 0):
-                    spl_out = gl.GLLinePlotItem(pos = list(plot_cache_outrange_up[['px','py','pz']].itertuples(index=False, name=None)), 
-                                        color = (
-                                                        csv.color[0], 
-                                                        csv.color[1], 
-                                                        csv.color[2],
-                                                        0.2),
-                                            mode = 'line_strip', width = 1)
-                    
-                    self.three_d_plot.addItem(spl_out)
+                # Plot 3D views
+                for cache, color in [(plot_cache_in, color_3d),
+                                   (plot_cache_out_down, color_3d_dim),
+                                   (plot_cache_out_up, color_3d_dim)]:
+                    if len(cache) > 0:
+                        pos = cache[['px','py','pz']].values
+                        spl = gl.GLLinePlotItem(pos=pos, color=color,
+                                              mode='line_strip', width=1,
+                                              glOptions='opaque')
+                        self.three_d_plot.addItem(spl)
 
-                spl_in = gl.GLLinePlotItem(pos = list(plot_cache_in[['px','py','pz']].itertuples(index=False, name=None)), 
-                                        color = (
-                                                        csv.color[0], 
-                                                        csv.color[1], 
-                                                        csv.color[2],
-                                                        0.5),
-                                            mode = 'line_strip', width = 1, glOptions='opaque')
-                
-                self.three_d_plot.addItem(spl_in)
-
-                self.prespect_plot.plot(list(tuple(plot_cache_outrange_down['px'])), 
-                                        list(tuple(plot_cache_outrange_down['py'])),
-                                        pen = (
-                                                csv.color[0]*255/2, 
-                                                csv.color[1]*255/2, 
-                                                csv.color[2]*255/2,
-                                                ),
-                                        width=2)
-                self.prespect_plot.plot(list(tuple(plot_cache_outrange_up['px'])), 
-                                        list(tuple(plot_cache_outrange_up['py'])),
-                                        pen = (
-                                                csv.color[0]*255/2, 
-                                                csv.color[1]*255/2, 
-                                                csv.color[2]*255/2,
-                                                ),
-                                        width=2)
-                self.prespect_plot.plot(list(tuple(plot_cache_in['px'])), 
-                                        list(tuple(plot_cache_in['py'])),
-                                        pen = (
-                                                csv.color[0]*255, 
-                                                csv.color[1]*255, 
-                                                csv.color[2]*255,
-                                                ),
-                                        width=2)
-                self.prespect_plot.plot(list(tuple(plot_cache['px'])), 
-                                        list(tuple(plot_cache['py'])),
-                                        pen = (
-                                                csv.color[0]*255, 
-                                                csv.color[1]*255, 
-                                                csv.color[2]*255,
-                                                ),
-                                        width=2)
-
+                # Add range indicator lines
+                if self.start_from_index > 0 and self.end_to_index > 0:
+                    self.two_d_plot.addItem(
+                        pg.InfiniteLine(self.start_from_index, angle=90, 
+                                      pen=(255,0,0), movable=False),
+                        ignoreBounds=True)
+                    self.two_d_plot.addItem(
+                        pg.InfiniteLine(self.end_to_index, angle=90,
+                                      pen=(0,0,255), movable=False),
+                        ignoreBounds=True)
             else:
-                self.prespect_plot.plot(list(tuple(plot_cache['px'])), 
-                                        list(tuple(plot_cache['py'])),
-                                        pen = (
-                                                csv.color[0]*255, 
-                                                csv.color[1]*255, 
-                                                csv.color[2]*255,
-                                                ),
-                                        width=2)
-
-                self.two_d_plot.plot(list(tuple(plot_cache['timestamp'].astype(float))), 
-                        list(tuple(plot_cache['pz'])),
-                        pen = (
-                                csv.color[0]*255, 
-                                csv.color[1]*255, 
-                                csv.color[2]*255,
-                                ),
-                    width=2
-                    )
-
-                spl = gl.GLLinePlotItem(pos = list(plot_cache[['px','py','pz']].itertuples(index=False, name=None)), 
-                                        color = (
-                                                        csv.color[0], 
-                                                        csv.color[1], 
-                                                        csv.color[2],
-                                                        0.5),
-                                            mode = 'line_strip', width = 1, glOptions='opaque')
-                
+                # Plot full range
+                self.prespect_plot.plot(plot_cache['px'].values,
+                                      plot_cache['py'].values,
+                                      pen=color_rgb, width=2)
+                self.two_d_plot.plot(plot_timestamps,
+                                   plot_cache['pz'].values,
+                                   pen=color_rgb, width=2)
+                pos = plot_cache[['px','py','pz']].values
+                spl = gl.GLLinePlotItem(pos=pos, color=color_3d,
+                                      mode='line_strip', width=1,
+                                      glOptions='opaque')
                 self.three_d_plot.addItem(spl)
-
-        if (self.start_from_index > 0) and (self.end_to_index > 0):
-        
-                start_from_line = pg.InfiniteLine(self.start_from_index, angle = 90, pen = (
-                                                255, 
-                                                0, 
-                                                0,
-                                                ),
-                                                movable = False,
-                                                )
-                end_to_line = pg.InfiniteLine(self.end_to_index, angle = 90, pen = (
-                                                0, 
-                                                0, 
-                                                255,
-                                                ),
-                                                movable = False,
-                                                )
-                self.two_d_plot.addItem(start_from_line, ignoreBounds=True)
-                self.two_d_plot.addItem(end_to_line, ignoreBounds=True)
-        #print(time.time() - deb_t)  
 
     def start(self):
         QtWidgets.QApplication.instance().exec()

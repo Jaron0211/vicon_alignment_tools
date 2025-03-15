@@ -182,38 +182,34 @@ def _closest_point(point, points):
         return points[cdist([point], points).argmin()]
 
 def ICP(source: pd.DataFrame, 
-        target: pd.DataFrame, 
-        SampleNum : int = 60) :
+    target: pd.DataFrame, 
+    SampleNum : int = 60) :
 
-    TargetCache = target.copy()
-    SourceCache = source.copy()
+    # Get numpy arrays directly instead of creating intermediate DataFrames
+    source_points = source[['px','py','pz']].to_numpy()
+    target_points = target[['px','py','pz']].to_numpy()[::int(target.shape[0]/SampleNum)]
 
-    SourceCachePoint = pd.DataFrame()
-    TargetCachePoint = pd.DataFrame()
+    # Calculate centroids efficiently using numpy
+    source_centroid = np.mean(source_points, axis=0)
+    target_centroid = np.mean(target_points, axis=0)
 
-    TargetCacheCentroid = np.asarray(TargetCache[['px','py','pz']].mean())
-    SourceCacheCentroid = np.asarray(SourceCache[['px','py','pz']].mean())
+    # Use scipy's cdist for vectorized nearest neighbor search
+    distances = cdist(target_points, source_points)
+    closest_indices = np.argmin(distances, axis=1)
+    source_matches = source_points[closest_indices]
 
-    SourceCachePoint['point'] = [[x,y,z] for  x,y,z in zip(SourceCache['px'], SourceCache['py'], SourceCache['pz'])]
-    TargetCachePoint['point'] = [[x,y,z] for  x,y,z in zip(TargetCache['px'][::int(TargetCache.shape[0]/SampleNum)], 
-                                                            TargetCache['py'][::int(TargetCache.shape[0]/SampleNum)], 
-                                                            TargetCache['pz'][::int(TargetCache.shape[0]/SampleNum)])]
+    # Calculate covariance matrix directly
+    covariance = target_points.T @ source_matches
+
+    # SVD decomposition
+    U, _, Vt = np.linalg.svd(covariance)
     
-    TargetCachePoint['closest'] = [_closest_point(x, list(SourceCachePoint['point'])) for x in TargetCachePoint['point']]
+    # Calculate rotation and translation
+    rotation = U @ Vt
+    translation = target_centroid - rotation @ source_centroid
+    translation = translation.reshape(1,3)
 
-    SourcePointMatrix = np.asarray([list(point) for point in TargetCachePoint['closest'].to_list()])
-    TargetPointMatrix = np.asarray([list(point) for point in TargetCachePoint['point'].to_list()])
-
-    CovMatrix = TargetPointMatrix.transpose() @ SourcePointMatrix
-
-    #SVD
-    U, X, Vt = np.linalg.svd(CovMatrix)
-    Rot = U @ Vt
-    
-    Trans = TargetCacheCentroid - Rot @ SourceCacheCentroid
-    Trans = np.reshape(Trans, (1,3))
-
-    return Rot, Trans
+    return rotation, translation
 
         
 def PlotDistribution(source: pd.DataFrame):
@@ -255,14 +251,12 @@ def PlotDistribution(source: pd.DataFrame):
 
     return XMean, YMean, ZMean
 
-def CreateTimeViaHz(source: pd.DataFrame, end_time, hz = 100):
-
+def CreateTimeViaHz(source: pd.DataFrame, end_time, hz=100):
     SourceCache = source.copy()
-
-    timestamp_array = [ (end_time - 1/hz*i*10**9) for i in range(0, source.shape[0], 1)]
-
-    SourceCache['timestamp'] = timestamp_array[::-1]
-
+    start_time = end_time - (len(source) - 1) * (1 / hz) * 10**9
+    timestamp_array = np.linspace(start_time, end_time, num=len(source))
+    SourceCache['timestamp'] = timestamp_array
+    print(f"Generated timestamps from {start_time} to {end_time} with {len(source)} entries.")
     return SourceCache
 
 def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
@@ -274,18 +268,11 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
     SourceCache = source.copy()
     TargetCache = target.copy()
 
-    if (source['timestamp'].isna().any() or 
-        TargetCache['timestamp'].min() >= SourceCache['timestamp'].max() or 
-        TargetCache['timestamp'].max() <= SourceCache['timestamp'].min()):
-        
+    if source['timestamp'].isna().any():
         SourceCache = CreateTimeViaHz(source, target['timestamp'].iloc[-1])
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111)
-    # ax.set_title('Before Iteration')
-    # ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
-    # ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
-    # plt.show()
+    print(f"Source timestamps: {SourceCache['timestamp'].head()}")
+    print(f"Target timestamps: {TargetCache['timestamp'].head()}")
 
     BestTimeShift = 0
     Pre_BestTimeShift = 10**100
@@ -293,77 +280,54 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
 
     _StartOfSecondIteration = 0
     _EndOfSecondIteration = int(TargetCache['timestamp'].max() - TargetCache['timestamp'].min() + SourceCache['timestamp'].max() - SourceCache['timestamp'].min())
-    _Step = int((_EndOfSecondIteration - _StartOfSecondIteration)/20)
+    _Step = int((_EndOfSecondIteration - _StartOfSecondIteration) / 20)
     _StartOfSecondIteration = -_Step * 10
 
-    while 1:
-        
-        if (Pre_BestTimeShift == 0):
+    print(f"Initial range for time shift: {_StartOfSecondIteration} to {_EndOfSecondIteration} with step {_Step}")
+
+    while True:
+        if Pre_BestTimeShift == 0:
             print('Best time shift: ', BestTimeShift)
             break
 
-        for i in tqdm(range(_StartOfSecondIteration, _EndOfSecondIteration, _Step)):
-
+        for i in range(_StartOfSecondIteration, _EndOfSecondIteration, _Step):
             SourceShift = SourceCache.copy()
-
             SourceShift['timestamp'] += i
 
-            SourceCacheInterpolation = MakeInterpolationData(SourceShift,TargetCache)
+            SourceCacheInterpolation = MakeInterpolationData(SourceShift, TargetCache)
 
-            Error = abs(SourceCacheInterpolation['px'][SourceCacheInterpolation['timestamp'].isin(target['timestamp'])].to_numpy() - target['px'].to_numpy()).sum()
+            Error = abs(SourceCacheInterpolation['pz'][SourceCacheInterpolation['timestamp'].isin(target['timestamp'])].to_numpy() - target['pz'].to_numpy()).sum()
 
             if Error < PreviousError:
-
                 BestTimeShift = i
                 PreviousError = Error
-            
-    
+
+        print(f"Iteration complete. Best time shift so far: {BestTimeShift} with error {PreviousError}")
+
         _StartOfSecondIteration = int(BestTimeShift - _Step)
         _EndOfSecondIteration = int(BestTimeShift + _Step)
-        _Step = int((_EndOfSecondIteration - _StartOfSecondIteration)/20)
+        _Step = max(1, int((_EndOfSecondIteration - _StartOfSecondIteration) / 20))
 
-        
-
-        print(1 - abs( BestTimeShift / Pre_BestTimeShift))
-        
-        # TargetCache['timestamp'] -= BestTimeShift
-        # fig = plt.figure()
-        # ax = fig.add_subplot(111)
-        # ax.set_title('After Iteration')
-        # ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
-        # ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
-        # plt.show()
-        
-        if 1 - abs( BestTimeShift / Pre_BestTimeShift) == 0:
+        if abs(BestTimeShift - Pre_BestTimeShift) < 1:
             print('Best time shift: ', BestTimeShift)
             break
 
         Pre_BestTimeShift = BestTimeShift
-        
-        
-    
-    # TargetCache['timestamp'] -= BestTimeShift
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111)
-    # ax.set_title('After Iteration')
-    # ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
-    # ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
-    # plt.show()
 
     return SourceCache, TargetCache, BestTimeShift
-    
 
 if __name__ == '__main__':
-    source = pd.read_csv('Aligned_dynamic_gt_1.csvedit.csv.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
-    target = pd.read_csv('Aligned_dynaVINS_50_dynamic_1.bag_vio.csv.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    source = pd.read_csv('/home/jaron0211/workspace/vicon_alignment_tools/csv/gt/dynamic_gt_3.csvedit.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
+    target = pd.read_csv('/home/jaron0211/workspace/vicon_alignment_tools/csv/dgvins/dgvins_dynamic_3.bag_vio.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
     
     source['timestamp'] = np.nan
     #source = pd.read_csv('csv/gt/dynamic_gt_3.csvedit.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
     #target = pd.read_csv('csv/dgvins/dgvins_dynamic_3.bag_vio.csv', header=None, names=['timestamp','px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz' ])
 
-    source, target = AlignmentPath(source, target)
+    source, target, best_shift = AlignmentPath(source, target)
+    print(f"Final best time shift: {best_shift}")
 
     #GetRotFromTwoPC(source, target)
     # ICP(source, target)
     #GeometryDescriptor(source)
-    
+
