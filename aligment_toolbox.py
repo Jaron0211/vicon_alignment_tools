@@ -274,8 +274,11 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
     SourceCache = source.copy()
     TargetCache = target.copy()
 
-    if (source['timestamp'].isna().any() or TargetCache['timestamp'].min() >= SourceCache['timestamp'].max() or TargetCache['timestamp'].max() <= SourceCache['timestamp'].min()):
-        SourceCache = CreateTimeViaHz(source, target['timestamp'].loc[0])
+    if (source['timestamp'].isna().any() or 
+        TargetCache['timestamp'].min() >= SourceCache['timestamp'].max() or 
+        TargetCache['timestamp'].max() <= SourceCache['timestamp'].min()):
+        
+        SourceCache = CreateTimeViaHz(source, target['timestamp'].iloc[-1])
 
     # fig = plt.figure()
     # ax = fig.add_subplot(111)
@@ -288,13 +291,16 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
     Pre_BestTimeShift = 10**100
     PreviousError = 10**9
 
-    print('First Proximation')
-
     _StartOfSecondIteration = 0
     _EndOfSecondIteration = int(TargetCache['timestamp'].max() - TargetCache['timestamp'].min() + SourceCache['timestamp'].max() - SourceCache['timestamp'].min())
     _Step = int((_EndOfSecondIteration - _StartOfSecondIteration)/20)
+    _StartOfSecondIteration = -_Step * 10
 
     while 1:
+        
+        if (Pre_BestTimeShift == 0):
+            print('Best time shift: ', BestTimeShift)
+            break
 
         for i in tqdm(range(_StartOfSecondIteration, _EndOfSecondIteration, _Step)):
 
@@ -305,6 +311,7 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
             SourceCacheInterpolation = MakeInterpolationData(SourceShift,TargetCache)
 
             Error = abs(SourceCacheInterpolation['px'][SourceCacheInterpolation['timestamp'].isin(target['timestamp'])].to_numpy() - target['px'].to_numpy()).sum()
+
             if Error < PreviousError:
 
                 BestTimeShift = i
@@ -315,22 +322,33 @@ def AlignmentPath(source: pd.DataFrame, target: pd.DataFrame):
         _EndOfSecondIteration = int(BestTimeShift + _Step)
         _Step = int((_EndOfSecondIteration - _StartOfSecondIteration)/20)
 
-        if (Pre_BestTimeShift == 0): break
+        
 
         print(1 - abs( BestTimeShift / Pre_BestTimeShift))
+        
+        # TargetCache['timestamp'] -= BestTimeShift
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111)
+        # ax.set_title('After Iteration')
+        # ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
+        # ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
+        # plt.show()
+        
         if 1 - abs( BestTimeShift / Pre_BestTimeShift) == 0:
             print('Best time shift: ', BestTimeShift)
             break
 
         Pre_BestTimeShift = BestTimeShift
+        
+        
     
-    #TargetCache['timestamp'] -= BestTimeShift
-    #fig = plt.figure()
-    #ax = fig.add_subplot(111)
-    #ax.set_title('After Iteration')
-    #ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
-    #ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
-    #plt.show()
+    # TargetCache['timestamp'] -= BestTimeShift
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111)
+    # ax.set_title('After Iteration')
+    # ax.scatter(SourceCache['timestamp'], SourceCache['px'], s= .1, c = 'b')
+    # ax.scatter(TargetCache['timestamp'], TargetCache['px'], s= .1, c = 'r')
+    # plt.show()
 
     return SourceCache, TargetCache, BestTimeShift
     
